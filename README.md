@@ -4,59 +4,66 @@
 
 **Concept**
 
-We're building an AI-powered stock intelligence platform where users interact through natural language. The system interprets open-ended financial queries, reasons about which data to fetch and when, and surfaces either a shortlist of relevant stocks or a deep single-stock analysis depending on what the user asked. Key framing: we are not predicting — we are surfacing signal intelligence and narrative explanation. This keeps the product defensible and genuinely educational.
+We're building an educational stock intelligence platform where users input a company name and a time frame, and the system explains why that stock moved the way it did. It combines web-scraped cultural and news signals with financial and valuation metrics from yfinance, Forum attention data, and document-level analysis from SEC quarterly and annual filings into a unified explanation. Key framing: we are not predicting — we are educating users on what drove a stock's movement through cultural, social, and financial factors. This keeps the product defensible and genuinely educational.
 
 ---
 
 **Sponsor Integration**
 
-Forum (YC W26) provides cultural attention scores for each stock. Every stock surface in the product, whether in a shortlist or a detailed view, displays a Forum Attention Score pulled from their API. This is a lightweight but persistent integration that runs alongside every other output.
+Forum (YC W26) is our cultural signal source. We query their API for the stock's attention data over the selected time frame, which feeds into the Cultural Score alongside web-scraped news and cultural context pulled by the web scraper tool.
 
-Nozomio's Nia (YC S25) is the document intelligence layer. Once a stock reaches the detailed analysis stage, Nia indexes the company's 10-K filing retrieved from EDGAR and serves as the semantic search layer that the agent queries for specific sections like risk factors, revenue discussion, and MD&A. This is what allows the analysis to go beyond surface metrics and into the actual language of the financial report.
+Nozomio's Nia (YC S25) is our document intelligence layer. Once a stock is queried, the EDGAR agent fetches the most recent 10-Q and 10-K filings for that company and indexes them into Nia. The agent then semantically queries relevant sections — risk factors, MD&A, revenue discussion — to pull document-level reasoning that explains the stock's movement beyond what raw metrics alone can show.
 
 Omnara (YC S25) was used as the development environment for scaffolding this application.
 
 ---
 
-**Two User Flows**
+**User Flow**
 
-**Flow A — Discovery Query**
-
-The user submits a natural language query like "Give me a stock that is undervalued, stable, and has positive growth over the last 6 months." The reasoning agent interprets this, maps it to concrete financial metrics, and uses yfinance to screen for 5-10 stocks that match. Each result is displayed as a card showing key valuation metrics and a Forum Attention Score. If the user clicks into a stock, the system transitions to Flow B.
-
-**Flow B — Deep Analysis**
-
-Triggered either by a direct query like "Give me a detailed analysis on the Nike stock" or by a user clicking into a stock from Flow A. The EDGAR agent fetches the most recent 10-K for the company, indexes it into Nia, and the document agent queries relevant sections semantically. In parallel, yfinance pulls the full set of valuation and financial metrics. The output combines a structured metrics view with a narrative analysis drawn from the actual financial documents, plus the Forum Attention Score.
+The user inputs a company name and a time frame (e.g. "Nike", Q3 2024). The orchestrator agent reasons about what data it needs and calls the appropriate tools. yfinance pulls the stock's price movement and valuation metrics over that period. The web scraper pulls relevant news articles and cultural events from that period with cited sources. The EDGAR tool fetches the 10-Q and 10-K, indexes them into Nia, and the document agent queries sections relevant to the selected time frame. The LLM then synthesizes everything into a Cultural Score (0–100) and a Financial Score (0–100), combined into a single Alpha Score with a directional arrow, bullet-point reasoning, and cited sources that explain why the stock moved the way it did.
 
 ---
 
 **Agentic Architecture**
 
-The system is a reasoning loop, not a fixed pipeline. The orchestrator agent receives the user's query and decides which tools to invoke and in what order based on what the query requires.
+The system is a reasoning loop, not a fixed pipeline. The orchestrator agent receives the user's input and decides which tools to invoke and in what order. It evaluates after each tool call whether it has enough signal to proceed or whether it needs to query further.
 
-Available tools the agent can call:
-- **Screener tool** — queries yfinance across a filtered universe of stocks based on metrics the agent derives from the user's natural language input. Used in Flow A.
-- **Metrics tool** — pulls valuation and financial metrics for a specific ticker via yfinance. Used in both flows.
-- **EDGAR tool** — fetches the most recent 10-K filing for a given company from the SEC EDGAR API.
-- **Nia document tool** — indexes the retrieved 10-K into Nia and runs semantic search queries against specific sections. Used in Flow B.
-- **Forum tool** — pulls the cultural attention score for any given ticker. Runs in both flows.
+Available tools:
+- **Metrics tool** — pulls stock price movement and valuation metrics (P/E ratio, revenue growth QoQ, short interest %, analyst sentiment, insider trading activity) for the given ticker and time frame via yfinance.
+- **EDGAR tool** — fetches the most recent 10-Q and 10-K filings for the company from the SEC EDGAR API.
+- **Nia document tool** — indexes the retrieved filing into Nia and runs semantic search queries against specific sections relevant to the time frame.
+- **Web scraper tool** — pulls important news articles and cultural movements from the web relevant to the stock over the selected time period. Returns results with cited sources and publication dates so the LLM reasons only over grounded, attributable content rather than hallucinating cultural context. Details TBD.
 
-The agent evaluates after each tool call whether it has sufficient signal to proceed or whether it needs to query another tool. For example, if the metrics for a screened stock look anomalous, the agent can choose to pull and query the 10-K before surfacing it to the user. This conditional, iterative behavior is what makes the system agentic rather than a scripted sequence of API calls.
+The LLM is accessed via the Gemini API (Gemini 2.0 Flash) with function calling enabled. Tools are passed as function definitions and the agent loop runs until the LLM stops returning tool calls and produces the final scored output.
 
 ---
 
-**Financial Metrics**
+**Scoring Output**
 
-P/E ratio, revenue growth QoQ, short interest %, analyst sentiment score, and insider trading activity. All sourced via yfinance. For Flow A screening, the agent selects the subset of metrics most relevant to the user's query rather than always pulling all five.
+Cultural Score (0–100) reflects web-scraped news, cultural events, and social momentum over the time frame, with all contributing sources cited so the LLM reasoning is fully grounded and attributable. Financial Score (0–100) reflects valuation metrics and document-level signals from the 10-K. These combine into a single Alpha Score with a directional arrow and bullet-point reasoning that cites specific cultural events, financial metrics, and filing language as contributing factors. The output educates the user on what actually drove the movement rather than just showing them a chart.
+
+---
+
+**Pitfalls and Mitigations**
+
+If the financial and cultural outputs feel like two separate reports bolted together, the fix is combining them into a single Alpha Score with one directional signal. The output must be unified, not side by side.
+
+If scope feels too wide, hardcode 2–3 demo examples that work perfectly. Judges care about a clean demo over broad coverage.
+
+Never use the word "prediction" anywhere in the product or pitch. We are an educational platform doing signal intelligence. The moment you say prediction, judges will ask about backtesting and there is no answer for that.
+
+---
+
+**Financial Metrics (locked in)**
+
+P/E ratio, revenue growth QoQ, short interest %, analyst sentiment score, and insider trading activity. All sourced via yfinance. These are displayed alongside the narrative explanation as concrete data points that support the agent's reasoning.
 
 ---
 
 **Demo Scope**
 
-Two demo examples should be hardcoded and tested before the event. One should be a discovery query that surfaces a clean shortlist with visible metric reasoning. The other should be a direct deep-analysis query on a well-known stock where the 10-K narrative adds something the metrics alone don't show. Judges care about a clean demo over broad coverage.
-
-Never use the word "prediction" anywhere in the product or pitch. The platform does signal intelligence and narrative explanation. The moment you say prediction, judges will ask about backtesting and there is no answer for that.
+User inputs a stock and time frame → orchestrator agent fires → yfinance pulls price movement and valuation metrics → web scraper pulls relevant news and cultural events from that period with cited sources → EDGAR fetches 10-Q and 10-K → Nia indexes and queries relevant sections → LLM synthesizes everything into a Cultural Score, Financial Score, and unified Alpha Score with bullet reasoning and cited sources. That's the full loop and it's clean enough to demo confidently.
 
 ---
 
-**Tonight's checklist before the hackathon:** Get API keys for Forum, Nia, and EDGAR ready before you show up. Pre-select 2-3 demo tickers and verify yfinance returns clean data for them. Confirm Nia can index a document source and return semantic search results before building around it.
+**Tonight's checklist before the hackathon:** Get API keys for Nia, Gemini, Forum, and EDGAR (free, no key required) ready before you show up. Test each tool function in isolation before wiring them into the agent loop. Agree on 2–3 hardcoded demo examples with clear narratives so you're not scrambling for test cases during the event.
