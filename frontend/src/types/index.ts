@@ -76,6 +76,11 @@ export interface AnalysisResult {
   reasoning: ReasoningPoint[];
   summary: string;
   sources: Source[];
+  dataErrors?: {
+    financial?: string;
+    cultural?: string;
+    synthesis?: string;
+  };
 }
 
 // Agent progress

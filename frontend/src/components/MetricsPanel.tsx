@@ -3,7 +3,7 @@
 
 import type { FinancialMetrics } from "@/types";
 
-interface Props { metrics: FinancialMetrics; periodLabel: string }
+interface Props { metrics: FinancialMetrics; periodLabel: string; error?: string }
 
 function fmt(val: number | null, f: (v: number) => string, fallback = "—") {
   return val == null ? fallback : f(val);
@@ -42,7 +42,24 @@ function MetricCell({ label, value, delta, color, highlight }: {
   );
 }
 
-export default function MetricsPanel({ metrics, periodLabel }: Props) {
+export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
+  if (error) {
+    return (
+      <div className="panel-box fade-up fade-up-3">
+        <div className="panel-label">Financial Metrics (Yahoo) — {periodLabel}</div>
+        <div style={{
+          padding: 14,
+          border: "1px solid var(--red)",
+          background: "rgba(255,76,76,0.06)",
+          color: "var(--red)",
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}>
+          {error}
+        </div>
+      </div>
+    );
+  }
   const epsC = metrics.epsSurprisePercent == null ? "var(--text)"
     : metrics.epsSurprisePercent > 0 ? "var(--green)" : "var(--red)";
   const revC = metrics.revenueSurprisePercent == null ? "var(--text)"
@@ -101,4 +118,3 @@ export default function MetricsPanel({ metrics, periodLabel }: Props) {
     </div>
   );
 }
-

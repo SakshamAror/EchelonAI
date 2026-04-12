@@ -14,6 +14,24 @@ interface Props { result: AnalysisResult }
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function AlphaSynthesis({ result }: { result: AnalysisResult }) {
+  if (result.dataErrors?.synthesis) {
+    return (
+      <div className="panel-box fade-up fade-up-4">
+        <div className="panel-label">Alpha Synthesis</div>
+        <div style={{
+          padding: 14,
+          border: "1px solid var(--red)",
+          background: "rgba(255,76,76,0.06)",
+          color: "var(--red)",
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}>
+          {result.dataErrors.synthesis}
+        </div>
+      </div>
+    );
+  }
+
   const catColor: Record<string, string> = {
     cultural:  "var(--purple)",
     financial: "var(--green)",
@@ -61,9 +79,9 @@ export default function ResultsPanel({ result }: Props) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
         className="fade-up fade-up-2">
         <ForumChart data={result.forumChart} />
-        <CulturalSignals signals={result.culturalSignals} />
+        <CulturalSignals signals={result.culturalSignals} error={result.dataErrors?.cultural} />
       </div>
-      <MetricsPanel metrics={result.metrics} periodLabel={periodLabel} />
+      <MetricsPanel metrics={result.metrics} periodLabel={periodLabel} error={result.dataErrors?.financial} />
       <AlphaSynthesis result={result} />
       <SourcesList sources={result.sources} />
     </div>

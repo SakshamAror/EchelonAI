@@ -88,7 +88,7 @@ export default function App() {
 
     if (USE_DEMO) {
       const key  = DEMO_KEY_MAP[req.company.toLowerCase()];
-      const demo = key ? await getDemoResultWithLiveMetrics(key) : null;
+      const demo = key ? await getDemoResultWithLiveMetrics(key, req.timeframe) : null;
 
       if (BYPASS_DEMO_AGENT_PROGRESS) {
         if (runIdRef.current !== runId) return;

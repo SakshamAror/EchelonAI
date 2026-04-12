@@ -1,7 +1,7 @@
 // READ instructions.txt before editing this file.
 // Hardcoded demo fixtures. Demo companies: Nike Sep 2024, Nvidia Aug 2024, Tesla Dec 2023
 
-import type { AnalysisResult, FinancialMetrics } from "@/types";
+import type { AnalysisResult, FinancialMetrics, TimeFrame } from "@/types";
 
 export const DEMO_RESULTS: Record<string, AnalysisResult> = {
 
@@ -167,30 +167,191 @@ interface YahooMetricsResponse {
   metrics: FinancialMetrics;
 }
 
-export async function getDemoResultWithLiveMetrics(key: string): Promise<AnalysisResult | null> {
+interface GeminiReasoningItem {
+  text: string;
+  category: "financial" | "cultural" | "filing";
+  sourceIndices: number[];
+}
+
+interface GeminiSynthesisResponse {
+  summary: string;
+  summarySourceIndices: number[];
+  reasoning: GeminiReasoningItem[];
+}
+
+function emptyMetrics(): FinancialMetrics {
+  return {
+    priceChangePercent: 0,
+    peRatio: null,
+    epsSurprisePercent: null,
+    revenueSurprisePercent: null,
+    dividendChangePercent: null,
+    fcfChangeQoQ: null,
+    pegRatio: null,
+    priceToBook: null,
+    priceToSalesTtm: null,
+    enterpriseValue: null,
+    enterpriseToEbitda: null,
+  };
+}
+
+function makeErrorResult(base: AnalysisResult, timeframe: TimeFrame, message: string): AnalysisResult {
+  return {
+    ...base,
+    timeframe,
+    metrics: emptyMetrics(),
+    culturalSignals: [],
+    summary: "",
+    reasoning: [],
+    forumChart: {
+      ...base.forumChart,
+      deltaPrice: 0,
+    },
+    dataErrors: {
+      financial: message,
+      cultural: message,
+      synthesis: message,
+    },
+  };
+}
+
+async function extractErrorDetail(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    if (typeof data?.detail === "string" && data.detail.trim()) return data.detail;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function getGeminiSynthesis(
+  result: AnalysisResult
+): Promise<{ payload: GeminiSynthesisResponse | null; error: string | null }> {
+  try {
+    const res = await fetch("/alpha-synthesis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticker: result.ticker,
+        companyName: result.companyName,
+        timeframe: result.timeframe,
+        direction: result.direction,
+        alphaScore: result.alphaScore,
+        culturalScore: result.culturalScore,
+        financialScore: result.financialScore,
+        forumMomentumScore: result.forumMomentumScore,
+        metrics: result.metrics,
+        culturalSignals: result.culturalSignals,
+        forumChart: result.forumChart,
+        sources: result.sources,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await extractErrorDetail(res, `Gemini synthesis request failed (${res.status})`);
+      return { payload: null, error: detail };
+    }
+    const payload = (await res.json()) as GeminiSynthesisResponse;
+    if (!payload?.summary || !Array.isArray(payload.reasoning) || !Array.isArray(payload.summarySourceIndices)) {
+      return { payload: null, error: "Gemini returned invalid synthesis response" };
+    }
+    const sourceCount = result.sources.length;
+    const isValidIdx = (idx: number) => Number.isInteger(idx) && idx >= 1 && idx <= sourceCount;
+    const summaryHasCitations =
+      payload.summarySourceIndices.length > 0 &&
+      payload.summarySourceIndices.every(isValidIdx);
+    if (!summaryHasCitations) {
+      return { payload: null, error: "Gemini summary is missing valid source citations" };
+    }
+
+    for (const item of payload.reasoning) {
+      if (!item?.text || !item?.category || !Array.isArray(item.sourceIndices)) {
+        return { payload: null, error: "Gemini returned malformed reasoning item" };
+      }
+      if (item.sourceIndices.length === 0 || !item.sourceIndices.every(isValidIdx)) {
+        return { payload: null, error: "Gemini reasoning contains invalid or missing source citations" };
+      }
+    }
+    return { payload, error: null };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Gemini synthesis request failed";
+    return { payload: null, error: detail };
+  }
+}
+
+export async function getDemoResultWithLiveMetrics(
+  key: string,
+  timeframe: TimeFrame
+): Promise<AnalysisResult | null> {
   const base = DEMO_RESULTS[key];
   if (!base) return null;
 
   try {
     const params = new URLSearchParams({
       ticker: base.ticker,
-      month: String(base.timeframe.month),
-      year: String(base.timeframe.year),
+      month: String(timeframe.month),
+      year: String(timeframe.year),
     });
     const res = await fetch(`/yahoo-metrics?${params.toString()}`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const detail = await extractErrorDetail(res, `Yahoo metrics request failed (${res.status})`);
+      return makeErrorResult(base, timeframe, `Financial fetch error: ${detail}`);
+    }
     const payload = (await res.json()) as YahooMetricsResponse;
-    if (!payload?.metrics) return null;
+    if (!payload?.metrics) {
+      return makeErrorResult(base, timeframe, "Financial fetch error: invalid Yahoo metrics payload");
+    }
 
-    return {
+    const resultWithLiveMetrics: AnalysisResult = {
       ...base,
+      timeframe,
       metrics: payload.metrics,
       forumChart: {
         ...base.forumChart,
         deltaPrice: payload.metrics.priceChangePercent,
       },
+      dataErrors: {
+        cultural: "Cultural signals are still static demo data until live cultural pipeline is connected.",
+      },
     };
-  } catch {
-    return null;
+
+    const { payload: synthesis, error: synthesisError } = await getGeminiSynthesis(resultWithLiveMetrics);
+    if (!synthesis) {
+      return {
+        ...resultWithLiveMetrics,
+        summary: "",
+        reasoning: [],
+        dataErrors: {
+          ...resultWithLiveMetrics.dataErrors,
+          synthesis: `Synthesis error: ${synthesisError ?? "unknown Gemini failure"}`,
+        },
+      };
+    }
+
+    const mappedReasoning = synthesis.reasoning
+      .filter((item) => item?.text && item?.category)
+      .map((item) => {
+        const pickedSources = (item.sourceIndices ?? [])
+          .map((idx) => resultWithLiveMetrics.sources[idx - 1])
+          .filter(Boolean);
+        return {
+          text: item.text,
+          category: item.category,
+          sources: pickedSources.length > 0 ? pickedSources : resultWithLiveMetrics.sources.slice(0, 1),
+        };
+      });
+
+    const summaryCitationTags = Array.from(new Set(synthesis.summarySourceIndices))
+      .map((idx) => `[${idx}]`)
+      .join("");
+
+    return {
+      ...resultWithLiveMetrics,
+      summary: `${synthesis.summary} ${summaryCitationTags}`.trim(),
+      reasoning: mappedReasoning.length > 0 ? mappedReasoning : resultWithLiveMetrics.reasoning,
+    };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Unexpected data fetch failure";
+    return makeErrorResult(base, timeframe, detail);
   }
 }

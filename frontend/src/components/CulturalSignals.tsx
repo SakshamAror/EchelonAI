@@ -4,9 +4,26 @@
 
 import type { CulturalSignal } from "@/types";
 
-interface Props { signals: CulturalSignal[] }
+interface Props { signals: CulturalSignal[]; error?: string }
 
-export default function CulturalSignals({ signals }: Props) {
+export default function CulturalSignals({ signals, error }: Props) {
+  if (error) {
+    return (
+      <div className="panel-box">
+        <div className="panel-label">Cultural Signals</div>
+        <div style={{
+          padding: 14,
+          border: "1px solid var(--red)",
+          background: "rgba(255,76,76,0.06)",
+          color: "var(--red)",
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}>
+          {error}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="panel-box">
       <div className="panel-label">Cultural Signals</div>

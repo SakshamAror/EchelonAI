@@ -14,10 +14,25 @@ const MONTH_NAMES = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
 ];
-const YEARS = [2025, 2024, 2023, 2022, 2021];
-const PERIOD_OPTIONS: TimeFrame[] = YEARS.flatMap(year =>
-  Array.from({ length: 12 }, (_, i) => ({ month: 12 - i, year }))
-);
+const MIN_YEAR = 2021;
+
+function buildPeriodOptions(): TimeFrame[] {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const options: TimeFrame[] = [];
+
+  for (let year = currentYear; year >= MIN_YEAR; year--) {
+    const startMonth = year === currentYear ? currentMonth : 12;
+    for (let month = startMonth; month >= 1; month--) {
+      options.push({ month, year });
+    }
+  }
+
+  return options;
+}
+
+const PERIOD_OPTIONS: TimeFrame[] = buildPeriodOptions();
 
 export function periodLabel({ month, year }: TimeFrame) {
   return `${MONTH_NAMES[month - 1]} ${year}`;
