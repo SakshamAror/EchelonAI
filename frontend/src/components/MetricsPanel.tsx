@@ -21,19 +21,90 @@ function compact(v: number) {
   return `${v.toFixed(0)}`;
 }
 
-function MetricCell({ label, value, delta, color, highlight, definition }: {
+type MetricTone = "signal" | "valuation" | "cashflow" | "neutral" | "positive" | "negative";
+
+function toneStyle(tone: MetricTone) {
+  if (tone === "positive") {
+    return {
+      border: "#3ddc8440",
+      bg: "rgba(61,220,132,0.10)",
+      chip: "#3ddc84",
+      label: "#7bf0b0",
+      value: "var(--green)",
+    };
+  }
+  if (tone === "negative") {
+    return {
+      border: "#ff4c4c40",
+      bg: "rgba(255,76,76,0.10)",
+      chip: "#ff4c4c",
+      label: "#ff8a8a",
+      value: "var(--red)",
+    };
+  }
+  if (tone === "signal") {
+    return {
+      border: "rgba(245,166,35,0.35)",
+      bg: "rgba(245,166,35,0.08)",
+      chip: "var(--accent)",
+      label: "#ffd08a",
+      value: "var(--text)",
+    };
+  }
+  if (tone === "valuation") {
+    return {
+      border: "rgba(124,110,245,0.35)",
+      bg: "rgba(124,110,245,0.08)",
+      chip: "var(--purple)",
+      label: "#b9b0ff",
+      value: "#d8d3ff",
+    };
+  }
+  if (tone === "cashflow") {
+    return {
+      border: "rgba(61,220,132,0.28)",
+      bg: "rgba(61,220,132,0.06)",
+      chip: "var(--green)",
+      label: "#8de9ba",
+      value: "var(--text)",
+    };
+  }
+  return {
+    border: "var(--border)",
+    bg: "var(--bg)",
+    chip: "var(--text-muted)",
+    label: "var(--text-muted)",
+    value: "var(--text)",
+  };
+}
+
+function MetricCell({ label, value, delta, color, highlight, tone, definition }: {
   label: string;
   value: string;
   delta?: string;
   color?: string;
   highlight?: "green" | "red";
+  tone?: MetricTone;
   definition: string;
 }) {
-  const bc = highlight === "green" ? "#3ddc8433" : highlight === "red" ? "#ff4c4c33" : "var(--border)";
-  const bg = highlight === "green" ? "rgba(61,220,132,0.04)" : highlight === "red" ? "rgba(255,76,76,0.04)" : "var(--bg)";
+  const resolvedTone: MetricTone =
+    highlight === "green"
+      ? "positive"
+      : highlight === "red"
+      ? "negative"
+      : tone ?? "neutral";
+  const t = toneStyle(resolvedTone);
 
   return (
-    <div style={{ padding: 14, border: `1px solid ${bc}`, background: bg, position: "relative" }}>
+    <div
+      style={{
+        padding: 14,
+        border: `1px solid ${t.border}`,
+        background: t.bg,
+        position: "relative",
+        borderLeft: `3px solid ${t.chip}`,
+      }}
+    >
       {highlight && (
         <span
           style={{
@@ -54,7 +125,7 @@ function MetricCell({ label, value, delta, color, highlight, definition }: {
         style={{
           fontSize: 9,
           letterSpacing: "0.2em",
-          color: "var(--accent)",
+          color: t.label,
           textTransform: "uppercase",
           marginBottom: 8,
         }}
@@ -62,7 +133,7 @@ function MetricCell({ label, value, delta, color, highlight, definition }: {
         {label}
       </p>
 
-      <p className="font-bebas" style={{ fontSize: 22, letterSpacing: "0.04em", color: color ?? "var(--text)" }}>
+      <p className="font-bebas" style={{ fontSize: 22, letterSpacing: "0.04em", color: color ?? t.value }}>
         {value}
       </p>
 
@@ -142,6 +213,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           }
           color={epsC}
           highlight={epsH}
+          tone="signal"
           definition="How far reported EPS differed from analyst consensus for the quarter."
         />
 
@@ -157,6 +229,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           }
           color={revC}
           highlight={revH}
+          tone="signal"
           definition="How far reported revenue differed from analyst consensus for the quarter."
         />
 
@@ -171,6 +244,16 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
               ? "var(--green)"
               : "var(--text)"
           }
+          highlight={
+            metrics.dividendChangePercent == null
+              ? undefined
+              : metrics.dividendChangePercent > 0
+              ? "green"
+              : metrics.dividendChangePercent < 0
+              ? "red"
+              : undefined
+          }
+          tone="cashflow"
           definition="Quarter-over-quarter percent change in dividend paid per share."
         />
 
@@ -185,6 +268,14 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
               ? "var(--green)"
               : "var(--red)"
           }
+          highlight={
+            metrics.fcfChangeQoQ == null
+              ? undefined
+              : metrics.fcfChangeQoQ >= 0
+              ? "green"
+              : "red"
+          }
+          tone="cashflow"
           definition="Quarter-over-quarter change in free cash flow (operating cash minus capex)."
         />
 
@@ -192,6 +283,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           label="P/E Ratio"
           value={fmt(metrics.peRatio, (v) => `${v.toFixed(2)}x`)}
           delta="Trailing or forward (Yahoo)"
+          tone="valuation"
           definition="Price per share divided by earnings per share; a common valuation multiple."
         />
 
@@ -199,6 +291,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           label="PEG Ratio"
           value={fmt(metrics.pegRatio, (v) => v.toFixed(2))}
           delta="Price/Earnings-to-Growth"
+          tone="valuation"
           definition="P/E ratio adjusted by earnings growth rate; lower can imply better value relative to growth."
         />
 
@@ -206,6 +299,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           label="Price / Book"
           value={fmt(metrics.priceToBook, (v) => `${v.toFixed(2)}x`)}
           delta="Valuation multiple"
+          tone="valuation"
           definition="Market value compared with book value of equity on the balance sheet."
         />
 
@@ -213,6 +307,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           label="Price / Sales (TTM)"
           value={fmt(metrics.priceToSalesTtm, (v) => `${v.toFixed(2)}x`)}
           delta="Trailing 12-month sales"
+          tone="valuation"
           definition="Market value relative to trailing twelve-month revenue."
         />
 
@@ -220,6 +315,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           label="Enterprise Value"
           value={fmt(metrics.enterpriseValue, compact)}
           delta="Total firm value"
+          tone="valuation"
           definition="Total takeover value: market cap plus debt minus cash."
         />
 
@@ -227,6 +323,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
           label="EV / EBITDA"
           value={fmt(metrics.enterpriseToEbitda, (v) => `${v.toFixed(2)}x`)}
           delta="Enterprise multiple"
+          tone="valuation"
           definition="Enterprise value divided by EBITDA; compares valuation across companies with different capital structures."
         />
       </div>
