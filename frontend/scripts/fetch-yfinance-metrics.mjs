@@ -64,6 +64,76 @@ function safePercentDelta(current, previous) {
   return ((current - previous) / Math.abs(previous)) * 100;
 }
 
+function extractQuarterCloses(chart, periodStart, periodEnd) {
+  return (chart?.quotes ?? [])
+    .filter((q) => q?.date && q?.close != null)
+    .filter((q) => q.date >= periodStart && q.date <= periodEnd)
+    .map((q) => ({ date: q.date, close: q.close }))
+    .filter((row) => typeof row.close === "number" && Number.isFinite(row.close))
+    .sort((a, b) => a.date - b.date);
+}
+
+function formatLabel(date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    timeZone: "UTC",
+  });
+}
+
+function sampleSeries(rows, maxPoints = 24) {
+  if (rows.length <= maxPoints) return rows;
+  const step = (rows.length - 1) / (maxPoints - 1);
+  const sampled = [];
+  for (let i = 0; i < maxPoints; i++) {
+    const idx = Math.round(i * step);
+    sampled.push(rows[idx]);
+  }
+  return sampled.filter((row, idx) => idx === 0 || row.date.getTime() !== sampled[idx - 1].date.getTime());
+}
+
+function normalizeSeries(values) {
+  if (values.length === 0) return [];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max === min) return values.map(() => 50);
+  return values.map((v) => ((v - min) / (max - min)) * 100);
+}
+
+function buildPriceChartData(quarterRows) {
+  if (!quarterRows || quarterRows.length < 2) return null;
+
+  const sampled = sampleSeries(quarterRows, 24);
+  if (sampled.length < 2) return null;
+
+  const closes = sampled.map((row) => row.close);
+  const normalized = normalizeSeries(closes).map((v) => Number(v.toFixed(2)));
+
+  let peakIndex = 0;
+  for (let i = 1; i < sampled.length; i++) {
+    if (sampled[i].close > sampled[peakIndex].close) peakIndex = i;
+  }
+
+  const startPrice = sampled[0].close;
+  const endPrice = sampled[sampled.length - 1].close;
+  const highPrice = Math.max(...closes);
+  const lowPrice = Math.min(...closes);
+  const deltaPrice = safePercentDelta(endPrice, startPrice) ?? 0;
+  const midIndex = Math.floor((sampled.length - 1) / 2);
+
+  return {
+    points: normalized,
+    labels: [formatLabel(sampled[0].date), formatLabel(sampled[midIndex].date), formatLabel(sampled[sampled.length - 1].date)],
+    peakIndex,
+    peakLabel: formatLabel(sampled[peakIndex].date),
+    deltaPrice: Number(deltaPrice.toFixed(2)),
+    startPrice: Number(startPrice.toFixed(2)),
+    endPrice: Number(endPrice.toFixed(2)),
+    highPrice: Number(highPrice.toFixed(2)),
+    lowPrice: Number(lowPrice.toFixed(2)),
+  };
+}
+
 function pairAtOrBeforeTarget(items, getDate, getValue, targetEnd) {
   const normalized = (items ?? [])
     .map((row) => ({ date: getDate(row), value: getValue(row) }))
@@ -124,12 +194,7 @@ function extractEarningsSurprises(quoteSummary, targetEnd) {
 }
 
 function priceChangeFromChart(chart, periodStart, periodEnd) {
-  const closes = chart?.quotes ?? [];
-  const clean = closes
-    .filter((q) => q?.date && q?.close != null)
-    .filter((q) => q.date >= periodStart && q.date <= periodEnd)
-    .map((q) => q.close)
-    .filter((v) => typeof v === "number" && Number.isFinite(v));
+  const clean = extractQuarterCloses(chart, periodStart, periodEnd).map((row) => row.close);
 
   if (clean.length < 2) return null;
   return safePercentDelta(clean[clean.length - 1], clean[0]);
@@ -183,10 +248,9 @@ async function fetchFinancialMetrics({ ticker, quarter, year }) {
     }),
   ]);
 
-  const { epsSurprisePercent, revenueSurprisePercent } = extractEarningsSurprises(
-    quoteSummary,
-    targetBounds.end
-  );
+  const { epsSurprisePercent, revenueSurprisePercent } = extractEarningsSurprises(quoteSummary, targetBounds.end);
+  const quarterPriceRows = extractQuarterCloses(chart, targetBounds.start, targetBounds.end);
+  const priceChart = buildPriceChartData(quarterPriceRows);
 
   const metrics = {
     priceChangePercent: priceChangeFromChart(chart, targetBounds.start, targetBounds.end) ?? 0,
@@ -215,6 +279,7 @@ async function fetchFinancialMetrics({ ticker, quarter, year }) {
     ticker,
     timeframe: { quarter, year },
     metrics,
+    priceChart,
     pulledFrom: {
       provider: "Yahoo Finance",
       modules: {

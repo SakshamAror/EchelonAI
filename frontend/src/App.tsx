@@ -6,16 +6,10 @@ import SearchForm, { periodLabel } from "@/components/SearchForm";
 import AgentProgress from "@/components/AgentProgress";
 import ResultsPanel from "@/components/ResultsPanel";
 import type { AnalysisRequest, AnalysisResult, AgentStep } from "@/types";
-import { getDemoResultWithLiveMetrics } from "@/api/demo";
+import { getAnyStockResultWithLiveMetrics } from "@/api/demo";
 
 const USE_DEMO = true;
 const BYPASS_DEMO_AGENT_PROGRESS = false;
-
-const DEMO_KEY_MAP: Record<string, string> = {
-  nike:   "NKE-Q3-2024",
-  nvidia: "NVDA-Q3-2024",
-  tesla:  "TSLA-Q4-2023",
-};
 
 const DEFAULT_STEPS: AgentStep[] = [
   { id: "forum",      label: "Pulling Forum attention data",                status: "pending" },
@@ -87,13 +81,11 @@ export default function App() {
     setStepsForRun(DEFAULT_STEPS.map(s => ({ ...s, status: "pending" })));
 
     if (USE_DEMO) {
-      const key  = DEMO_KEY_MAP[req.company.toLowerCase()];
-      const demo = key ? await getDemoResultWithLiveMetrics(key, req.timeframe) : null;
+      const demo = await getAnyStockResultWithLiveMetrics(req);
 
       if (BYPASS_DEMO_AGENT_PROGRESS) {
         if (runIdRef.current !== runId) return;
-        if (demo) setResult(demo);
-        else setError(`No demo data for "${req.company}". Try Nike, Nvidia, or Tesla.`);
+        setResult(demo);
         setOverlayOn(false);
         setStepsForRun([]);
         setLoading(false);
@@ -105,9 +97,7 @@ export default function App() {
         if (finished) return;
         if (runIdRef.current !== runId) return;
         finished = true;
-        if (demo) setResult(demo);
-        else if (key) setError(`Failed to fetch live Yahoo Finance metrics for "${req.company}".`);
-        else setError(`No demo data for "${req.company}". Try Nike, Nvidia, or Tesla.`);
+        setResult(demo);
         setOverlayOn(false);
         setStepsForRun([]);
         setLoading(false);

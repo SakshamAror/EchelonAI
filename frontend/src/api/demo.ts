@@ -1,7 +1,7 @@
 // READ instructions.txt before editing this file.
 // Hardcoded demo fixtures. Demo companies: Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023
 
-import type { AnalysisResult, FinancialMetrics, ReasoningPoint, TimeFrame } from "@/types";
+import type { AnalysisRequest, AnalysisResult, FinancialMetrics, ReasoningPoint, TimeFrame } from "@/types";
 
 export const DEMO_RESULTS: Record<string, AnalysisResult> = {
   // ─── NIKE Q3 2024 ─────────────────────────────────────────────────────────
@@ -37,7 +37,6 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       labels: ["Sep 1", "Sep 15", "Sep 30"],
       peakIndex: 7,
       peakLabel: "Sep 14",
-      deltaForum: 34,
       deltaPrice: -8.2,
     },
     summary:
@@ -90,7 +89,6 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       labels: ["Aug 1", "Aug 15", "Aug 31"],
       peakIndex: 8,
       peakLabel: "Aug 22",
-      deltaForum: 58,
       deltaPrice: 28.4,
     },
     summary:
@@ -141,7 +139,6 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       labels: ["Dec 1", "Dec 15", "Dec 31"],
       peakIndex: 0,
       peakLabel: "Dec 1",
-      deltaForum: -22,
       deltaPrice: -13.2,
     },
     summary:
@@ -160,10 +157,28 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
   },
 };
 
+const KNOWN_COMPANY_TICKERS: Record<string, string> = {
+  nike: "NKE",
+  nvidia: "NVDA",
+  tesla: "TSLA",
+};
+
+const DEMO_KEY_MAP: Record<string, string> = {
+  nike: "NKE-Q3-2024",
+  nvidia: "NVDA-Q3-2024",
+  tesla: "TSLA-Q4-2023",
+};
+
+interface YahooResolveResponse {
+  ticker: string;
+  companyName?: string;
+}
+
 interface YahooMetricsResponse {
   ticker: string;
   timeframe: { quarter: number; year: number };
   metrics: FinancialMetrics;
+  priceChart?: AnalysisResult["forumChart"] | null;
 }
 
 type DisplayedMetricKey = keyof FinancialMetrics;
@@ -235,8 +250,168 @@ function buildUnavailableForumChart(timeframe: TimeFrame, deltaPrice: number): A
     labels: [`${q} start`, `${q} mid`, `${q} end`],
     peakIndex: 0,
     peakLabel: "N/A",
-    deltaForum: 0,
     deltaPrice,
+    startPrice: null,
+    endPrice: null,
+    highPrice: null,
+    lowPrice: null,
+  };
+}
+
+function sanitizePriceChart(
+  chart: AnalysisResult["forumChart"] | null | undefined,
+  timeframe: TimeFrame,
+  deltaPriceFallback: number
+): AnalysisResult["forumChart"] | null {
+  if (!chart || !Array.isArray(chart.points) || chart.points.length < 2) return null;
+  const points = chart.points
+    .map((v) => (typeof v === "number" && Number.isFinite(v) ? v : null))
+    .filter((v): v is number => v != null);
+  if (points.length < 2) return null;
+
+  const labels = Array.isArray(chart.labels) && chart.labels.length > 0
+    ? chart.labels.slice(0, 3)
+    : [`Q${timeframe.quarter} start`, `Q${timeframe.quarter} mid`, `Q${timeframe.quarter} end`];
+  while (labels.length < 3) labels.push(labels[labels.length - 1] ?? "");
+
+  const peakIndexRaw = typeof chart.peakIndex === "number" ? chart.peakIndex : 0;
+  const peakIndex = Math.max(0, Math.min(points.length - 1, Math.round(peakIndexRaw)));
+  const peakLabel = typeof chart.peakLabel === "string" && chart.peakLabel.trim()
+    ? chart.peakLabel
+    : labels[1];
+
+  return {
+    points,
+    labels,
+    peakIndex,
+    peakLabel,
+    deltaPrice:
+      typeof chart.deltaPrice === "number" && Number.isFinite(chart.deltaPrice)
+        ? chart.deltaPrice
+        : deltaPriceFallback,
+    startPrice:
+      typeof chart.startPrice === "number" && Number.isFinite(chart.startPrice)
+        ? chart.startPrice
+        : null,
+    endPrice:
+      typeof chart.endPrice === "number" && Number.isFinite(chart.endPrice)
+        ? chart.endPrice
+        : null,
+    highPrice:
+      typeof chart.highPrice === "number" && Number.isFinite(chart.highPrice)
+        ? chart.highPrice
+        : null,
+    lowPrice:
+      typeof chart.lowPrice === "number" && Number.isFinite(chart.lowPrice)
+        ? chart.lowPrice
+        : null,
+  };
+}
+
+function normalizeTicker(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
+function isLikelyTickerSymbol(raw: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9.\-]{0,9}$/.test(raw.trim());
+}
+
+function inferTickerFromCompanyInput(companyInput: string): string | null {
+  const trimmed = companyInput.trim();
+  if (!trimmed) return null;
+
+  const inParens = trimmed.match(/\(([A-Za-z][A-Za-z0-9.\-]{0,9})\)\s*$/);
+  if (inParens?.[1]) return normalizeTicker(inParens[1]);
+
+  if (isLikelyTickerSymbol(trimmed)) return normalizeTicker(trimmed);
+
+  const tokens = trimmed.split(/\s+/);
+  const uppercaseToken = [...tokens]
+    .reverse()
+    .find((token) => /^[A-Z][A-Z0-9.\-]{0,9}$/.test(token));
+  if (uppercaseToken) return normalizeTicker(uppercaseToken);
+
+  return null;
+}
+
+async function resolveTickerFromYahooQuery(query: string): Promise<YahooResolveResponse | null> {
+  const q = query.trim();
+  if (!q) return null;
+
+  try {
+    const params = new URLSearchParams({ query: q });
+    const res = await fetch(`/yahoo-resolve?${params.toString()}`);
+    if (!res.ok) return null;
+
+    const payload = (await res.json()) as Partial<YahooResolveResponse>;
+    if (!payload?.ticker || typeof payload.ticker !== "string") return null;
+
+    return {
+      ticker: normalizeTicker(payload.ticker),
+      companyName:
+        typeof payload.companyName === "string" && payload.companyName.trim()
+          ? payload.companyName.trim()
+          : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveTickerAndCompany(
+  companyInput: string,
+  tickerHint?: string
+): Promise<{ ticker: string; companyName: string } | null> {
+  const trimmedCompany = companyInput.trim();
+
+  if (tickerHint && isLikelyTickerSymbol(tickerHint)) {
+    return {
+      ticker: normalizeTicker(tickerHint),
+      companyName: trimmedCompany || normalizeTicker(tickerHint),
+    };
+  }
+
+  const knownTicker = KNOWN_COMPANY_TICKERS[trimmedCompany.toLowerCase()];
+  if (knownTicker) {
+    return {
+      ticker: knownTicker,
+      companyName: trimmedCompany || knownTicker,
+    };
+  }
+
+  const inferred = inferTickerFromCompanyInput(trimmedCompany);
+  if (inferred) {
+    return {
+      ticker: inferred,
+      companyName: trimmedCompany || inferred,
+    };
+  }
+
+  const resolved = await resolveTickerFromYahooQuery(trimmedCompany);
+  if (!resolved) return null;
+
+  return {
+    ticker: resolved.ticker,
+    companyName: resolved.companyName ?? (trimmedCompany || resolved.ticker),
+  };
+}
+
+function buildGenericBaseResult(ticker: string, companyName: string, timeframe: TimeFrame): AnalysisResult {
+  return {
+    ticker,
+    companyName,
+    timeframe,
+    direction: "flat",
+    alphaScore: 0,
+    culturalScore: 0,
+    financialScore: 0,
+    forumMomentumScore: 0,
+    metrics: emptyMetrics(),
+    culturalSignals: [],
+    forumChart: buildUnavailableForumChart(timeframe, 0),
+    reasoning: [],
+    summary: "",
+    sources: [],
   };
 }
 
@@ -540,13 +715,10 @@ async function extractErrorDetail(res: Response, fallback: string): Promise<stri
   }
 }
 
-export async function getDemoResultWithLiveMetrics(
-  key: string,
+async function buildLiveResultFromBase(
+  base: AnalysisResult,
   timeframe: TimeFrame
-): Promise<AnalysisResult | null> {
-  const base = DEMO_RESULTS[key];
-  if (!base) return null;
-
+): Promise<AnalysisResult> {
   try {
     const params = new URLSearchParams({
       ticker: base.ticker,
@@ -569,6 +741,7 @@ export async function getDemoResultWithLiveMetrics(
         : payload.metrics.priceChangePercent < -1
           ? "down"
           : "flat";
+    const livePriceChart = sanitizePriceChart(payload.priceChart, timeframe, payload.metrics.priceChangePercent);
 
     const resultWithLiveMetrics: AnalysisResult = {
       ...base,
@@ -580,12 +753,12 @@ export async function getDemoResultWithLiveMetrics(
       forumMomentumScore: 0,
       metrics: payload.metrics,
       culturalSignals: [],
-      forumChart: buildUnavailableForumChart(timeframe, payload.metrics.priceChangePercent),
+      forumChart: livePriceChart ?? buildUnavailableForumChart(timeframe, payload.metrics.priceChangePercent),
       ...buildFinancialOnlySynthesis(base.companyName, timeframe, payload.metrics),
       sources: [],
       dataErrors: {
         scorecard: "Score block is hidden because alpha/cultural/forum scoring is not yet computed from live feeds.",
-        forumChart: "Forum chart hidden: live forum attention timeseries is not connected.",
+        forumChart: livePriceChart ? undefined : "Stock price chart is unavailable for this ticker/quarter from Yahoo Finance.",
         cultural: "Cultural signals hidden: live cultural feed is not connected.",
         sources: "Sources panel hidden: no live source ingestion is connected.",
       },
@@ -623,4 +796,42 @@ export async function getDemoResultWithLiveMetrics(
     const detail = err instanceof Error ? err.message : "Unexpected data fetch failure";
     return makeErrorResult(base, timeframe, detail);
   }
+}
+
+export async function getDemoResultWithLiveMetrics(
+  key: string,
+  timeframe: TimeFrame
+): Promise<AnalysisResult | null> {
+  const base = DEMO_RESULTS[key];
+  if (!base) return null;
+  return buildLiveResultFromBase(base, timeframe);
+}
+
+export async function getAnyStockResultWithLiveMetrics(
+  request: AnalysisRequest
+): Promise<AnalysisResult> {
+  const companyKey = request.company.trim().toLowerCase();
+  const demoKey = DEMO_KEY_MAP[companyKey];
+  if (demoKey) {
+    const demoResult = await getDemoResultWithLiveMetrics(demoKey, request.timeframe);
+    if (demoResult) return demoResult;
+  }
+
+  const resolved = await resolveTickerAndCompany(request.company, request.ticker);
+  if (!resolved) {
+    const fallbackTicker = inferTickerFromCompanyInput(request.company) ?? "UNKNOWN";
+    const base = buildGenericBaseResult(
+      fallbackTicker,
+      request.company.trim() || fallbackTicker,
+      request.timeframe
+    );
+    return makeErrorResult(
+      base,
+      request.timeframe,
+      `Could not resolve a valid ticker for "${request.company}". Enter a ticker symbol (example: AAPL).`
+    );
+  }
+
+  const base = buildGenericBaseResult(resolved.ticker, resolved.companyName, request.timeframe);
+  return buildLiveResultFromBase(base, request.timeframe);
 }

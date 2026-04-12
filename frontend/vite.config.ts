@@ -8,6 +8,8 @@ import type { IncomingMessage } from "node:http";
 
 const execFileAsync = promisify(execFile);
 const yahooScriptPath = path.resolve(__dirname, "./scripts/fetch-yfinance-metrics.mjs");
+const yahooResolveScriptPath = path.resolve(__dirname, "./scripts/resolve-yahoo-ticker.mjs");
+const yahooSearchScriptPath = path.resolve(__dirname, "./scripts/search-yahoo-equities.mjs");
 
 interface AlphaSynthesisInput {
   ticker: string;
@@ -131,6 +133,84 @@ function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string) {
   return {
     name: "yahoo-metrics-dev-endpoint",
     configureServer(server: import("vite").ViteDevServer) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/yahoo-search")) return next();
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        const url = new URL(req.url, "http://localhost");
+        const query = (url.searchParams.get("query") ?? "").trim();
+        if (!query) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Missing query param: query" }));
+          return;
+        }
+
+        try {
+          const { stdout } = await execFileAsync(
+            process.execPath,
+            [yahooSearchScriptPath, "--query", query],
+            {
+              cwd: __dirname,
+              maxBuffer: 2 * 1024 * 1024,
+            }
+          );
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(stdout);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Failed to search equities";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/yahoo-resolve")) return next();
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        const url = new URL(req.url, "http://localhost");
+        const query = (url.searchParams.get("query") ?? "").trim();
+        if (!query) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Missing query param: query" }));
+          return;
+        }
+
+        try {
+          const { stdout } = await execFileAsync(
+            process.execPath,
+            [yahooResolveScriptPath, "--query", query],
+            {
+              cwd: __dirname,
+              maxBuffer: 2 * 1024 * 1024,
+            }
+          );
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(stdout);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Failed to resolve ticker";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/yahoo-metrics")) return next();
         if (req.method !== "GET") {

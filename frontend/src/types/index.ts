@@ -44,8 +44,11 @@ export interface ForumChartData {
   labels: string[];    // [start, mid, end] x-axis labels
   peakIndex: number;   // index into points[] where peak occurred
   peakLabel: string;   // human label, e.g. "Oct 14"
-  deltaForum: number;  // % change in Forum attention over period
   deltaPrice: number;  // % change in price over same period
+  startPrice?: number | null;
+  endPrice?: number | null;
+  highPrice?: number | null;
+  lowPrice?: number | null;
 }
 
 export interface Source {
