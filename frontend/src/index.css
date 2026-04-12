@@ -62,12 +62,16 @@
   .panel-label {
     font-size: 9px;
     letter-spacing: 3px;
-    color: var(--text-muted);
+    color: var(--accent);
     text-transform: uppercase;
     margin-bottom: 20px;
     display: flex;
     align-items: center;
     gap: 10px;
+    width: fit-content;
+    padding: 4px 8px;
+    border: 1px solid var(--accent-dim);
+    background: rgba(245, 166, 35, 0.08);
   }
   .panel-label::after {
     content: '';
