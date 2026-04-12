@@ -35,7 +35,7 @@ export function streamAnalysis(
 ): () => void {
   const params = new URLSearchParams({
     company: request.company,
-    quarter: request.timeframe.quarter,
+    month: String(request.timeframe.month),
     year: String(request.timeframe.year),
     ...(request.ticker ? { ticker: request.ticker } : {}),
   });

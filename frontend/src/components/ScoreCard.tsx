@@ -1,127 +1,83 @@
 // READ instructions.txt before editing this file.
-// Alpha Score + Cultural + Financial score display.
-// Do NOT use "prediction" language anywhere — we explain movement, not forecast.
+// Alpha Score header — Bebas Neue big number, directional arrow, score bars.
+// Do NOT use "prediction" language. We explain movement, not forecast it.
 
 import type { AnalysisResult } from "@/types";
 
-interface Props { result: AnalysisResult; }
+interface Props { result: AnalysisResult }
 
-const dirConfig = {
-  up:   { symbol: "↑", label: "MOVED UP",   color: "var(--green)" },
-  down: { symbol: "↓", label: "MOVED DOWN", color: "var(--red)"   },
-  flat: { symbol: "→", label: "FLAT",        color: "var(--accent)" },
-};
-
-function scoreColor(n: number) {
-  if (n >= 65) return "var(--green)";
-  if (n >= 40) return "var(--accent)";
-  return "var(--red)";
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function fmtTF({ month, year }: { month: number; year: number }) {
+  return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
-function Bar({ value }: { value: number }) {
+function ScoreBarRow({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div style={{ height: 3, background: "var(--border)", marginTop: 6 }}>
-      <div
-        style={{
-          height: "100%",
-          width: `${value}%`,
-          background: scoreColor(value),
-          transition: "width 0.8s ease",
-        }}
-      />
+    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <span style={{ fontSize: 10, letterSpacing: "0.05em", color: "var(--text-muted)", width: 120, flexShrink: 0, textTransform: "uppercase" }}>
+        {label}
+      </span>
+      <div className="score-bar-track">
+        <div className="score-bar-fill" style={{ width: `${value}%`, background: color }} />
+      </div>
+      <span style={{ fontSize: 12, color: "var(--text)", width: 28, textAlign: "right" }}>{value}</span>
     </div>
   );
 }
+
+const dirConfig = {
+  up:   { arrow: "↑", color: "var(--green)" },
+  down: { arrow: "↓", color: "var(--red)"   },
+  flat: { arrow: "→", color: "var(--accent)" },
+};
 
 export default function ScoreCard({ result }: Props) {
   const dir = dirConfig[result.direction];
 
   return (
     <div
-      className="mt-8 border"
-      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+      className="panel-box fade-up fade-up-1"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto auto 1fr",
+        alignItems: "center",
+        gap: 32,
+        position: "relative",
+        overflow: "hidden",
+      }}
     >
-      {/* Top bar: ticker + direction */}
-      <div
-        className="flex items-center justify-between px-4 py-3 border-b"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <div className="flex items-center gap-3">
-          <span className="font-display font-bold text-xl tracking-wider" style={{ color: "var(--text)" }}>
-            {result.ticker}
-          </span>
-          <span className="font-mono text-[10px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-            {result.companyName.toUpperCase()} / {result.timeframe.quarter} {result.timeframe.year}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-lg" style={{ color: dir.color }}>
-            {dir.symbol}
-          </span>
-          <span className="font-mono text-[10px] tracking-widest" style={{ color: dir.color }}>
-            {dir.label}
-          </span>
-          <span className="font-mono font-bold text-sm" style={{ color: dir.color }}>
-            {result.metrics.priceChangePercent > 0 ? "+" : ""}
-            {result.metrics.priceChangePercent.toFixed(1)}%
-          </span>
-        </div>
+      {/* Watermark label */}
+      <span style={{
+        position: "absolute", top: 14, right: 18,
+        fontSize: 9, letterSpacing: "0.3em", color: "var(--text-dim)",
+        textTransform: "uppercase",
+      }}>
+        {result.ticker} / {fmtTF(result.timeframe).toUpperCase()}
+      </span>
+
+      {/* Big score number */}
+      <div style={{ textAlign: "center" }}>
+        <p style={{ fontSize: 9, letterSpacing: "0.3em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 6 }}>
+          Forum Alpha Score
+        </p>
+        <p className="font-bebas" style={{ fontSize: 96, lineHeight: 1, color: "var(--accent)", letterSpacing: "-2px" }}>
+          {result.alphaScore}
+        </p>
+        <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
+          {result.alphaScore >= 70 ? "Elevated Signal" : result.alphaScore >= 45 ? "Mixed Signal" : "Weak Signal"}
+        </p>
       </div>
 
-      {/* Score section */}
-      <div className="p-4">
-        <p className="font-mono text-[9px] tracking-[0.25em] mb-4" style={{ color: "var(--text-muted)" }}>
-          FORUM ALPHA SCORE
-        </p>
+      {/* Directional arrow */}
+      <p className="font-bebas" style={{ fontSize: 64, lineHeight: 1, color: dir.color }}>
+        {dir.arrow}
+      </p>
 
-        {/* Big Alpha Score */}
-        <div className="flex items-end gap-4 mb-6">
-          <span
-            className="font-display font-bold leading-none"
-            style={{ fontSize: "clamp(3.5rem, 12vw, 5rem)", color: scoreColor(result.alphaScore) }}
-          >
-            {result.alphaScore}
-          </span>
-          <div className="pb-2">
-            <p className="font-mono text-[10px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-              / 100
-            </p>
-            <p className="font-mono text-[10px]" style={{ color: "var(--text-dim)" }}>
-              COMBINED SIGNAL
-            </p>
-          </div>
-        </div>
-
-        {/* Cultural + Financial sub-scores */}
-        <div className="grid grid-cols-2 gap-4 mb-5">
-          {[
-            { label: "CULTURAL SCORE",  value: result.culturalScore,  sub: "News · Social · Forum" },
-            { label: "FINANCIAL SCORE", value: result.financialScore, sub: "Metrics · Filings" },
-          ].map(({ label, value, sub }) => (
-            <div key={label}>
-              <div className="flex justify-between items-baseline">
-                <span className="font-mono text-[9px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-                  {label}
-                </span>
-                <span className="font-mono font-bold text-sm" style={{ color: scoreColor(value) }}>
-                  {value}
-                </span>
-              </div>
-              <Bar value={value} />
-              <p className="font-mono text-[9px] mt-1" style={{ color: "var(--text-dim)" }}>{sub}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Summary narrative */}
-        <div
-          className="border-t pt-4"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <p className="font-mono text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-            {result.summary}
-          </p>
-        </div>
+      {/* Score bars */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <ScoreBarRow label="Cultural Score"   value={result.culturalScore}       color="var(--purple)" />
+        <ScoreBarRow label="Financial Score"  value={result.financialScore}      color="var(--green)"  />
+        <ScoreBarRow label="Forum Momentum"   value={result.forumMomentumScore}  color="var(--accent)" />
       </div>
     </div>
   );

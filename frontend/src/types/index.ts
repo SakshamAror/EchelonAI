@@ -6,10 +6,8 @@
 // existing interfaces.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type Quarter = "Q1" | "Q2" | "Q3" | "Q4";
-
 export interface TimeFrame {
-  quarter: Quarter;
+  month: number; // 1–12
   year: number;
 }
 
@@ -20,18 +18,40 @@ export interface AnalysisRequest {
 }
 
 export interface FinancialMetrics {
-  priceChangePercent: number;    // % move over the period
+  priceChangePercent: number;
   peRatio: number | null;
-  revenueGrowthQoQ: number | null; // as decimal e.g. 0.12 = +12%
+  revenueGrowthQoQ: number | null;        // decimal, e.g. -0.102
   shortInterestPercent: number | null;
-  analystSentimentScore: number | null; // 0–100
+  analystSentimentScore: number | null;   // 0–100
   insiderTradingActivity: "heavy buying" | "light buying" | "neutral" | "light selling" | "heavy selling" | null;
+  // Earnings signals
+  epsSurprisePercent: number | null;      // e.g. +4.1 = beat by 4.1%
+  revenueSurprisePercent: number | null;  // e.g. -2.8 = missed by 2.8%
+  dividendChangePercent: number | null;   // null = no dividend
+  fcfChangeQoQ: number | null;            // free cash flow % change
+  analystBreakdown: { buy: number; hold: number; sell: number } | null;
+}
+
+export interface CulturalSignal {
+  date: string;                            // e.g. "Oct 7"
+  sentiment: "pos" | "neg" | "neutral";
+  text: string;
+  source: string;                          // e.g. "Reuters · Bloomberg"
+}
+
+export interface ForumChartData {
+  points: number[];    // normalized 0–100 values, ~11 data points
+  labels: string[];    // [start, mid, end] x-axis labels
+  peakIndex: number;   // index into points[] where peak occurred
+  peakLabel: string;   // human label, e.g. "Oct 14"
+  deltaForum: number;  // % change in Forum attention over period
+  deltaPrice: number;  // % change in price over same period
 }
 
 export interface Source {
   title: string;
   url: string;
-  date: string;       // ISO date string
+  date: string;
   type: "news" | "filing" | "forum" | "web";
 }
 
@@ -46,16 +66,19 @@ export interface AnalysisResult {
   companyName: string;
   timeframe: TimeFrame;
   direction: "up" | "down" | "flat";
-  alphaScore: number;           // 0–100 combined score
+  alphaScore: number;           // 0–100
   culturalScore: number;        // 0–100
   financialScore: number;       // 0–100
+  forumMomentumScore: number;   // 0–100
   metrics: FinancialMetrics;
+  culturalSignals: CulturalSignal[];
+  forumChart: ForumChartData;
   reasoning: ReasoningPoint[];
-  summary: string;              // 2–3 sentence narrative
+  summary: string;
   sources: Source[];
 }
 
-// Agent progress — used by AgentProgress component
+// Agent progress
 export type AgentStepStatus = "pending" | "running" | "done" | "error";
 
 export interface AgentStep {

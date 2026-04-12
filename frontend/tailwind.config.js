@@ -5,12 +5,11 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        mono:    ["Space Mono", "monospace"],
+        mono:    ["DM Mono", "monospace"],
         display: ["Instrument Serif", "Georgia", "serif"],
+        bebas:   ["Bebas Neue", "sans-serif"],
       },
-      colors: {
-        accent: "#f5a623",
-      },
+      colors: { accent: "#f5a623" },
     },
   },
   plugins: [],
