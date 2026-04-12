@@ -6,7 +6,7 @@ import SearchForm, { periodLabel } from "@/components/SearchForm";
 import AgentProgress from "@/components/AgentProgress";
 import ResultsPanel from "@/components/ResultsPanel";
 import type { AnalysisRequest, AnalysisResult, AgentStep } from "@/types";
-import { DEMO_RESULTS } from "@/api/demo";
+import { getDemoResultWithLiveMetrics } from "@/api/demo";
 
 const USE_DEMO = true;
 const BYPASS_DEMO_AGENT_PROGRESS = false;
@@ -88,7 +88,7 @@ export default function App() {
 
     if (USE_DEMO) {
       const key  = DEMO_KEY_MAP[req.company.toLowerCase()];
-      const demo = key ? DEMO_RESULTS[key] : null;
+      const demo = key ? await getDemoResultWithLiveMetrics(key) : null;
 
       if (BYPASS_DEMO_AGENT_PROGRESS) {
         if (runIdRef.current !== runId) return;
@@ -106,6 +106,7 @@ export default function App() {
         if (runIdRef.current !== runId) return;
         finished = true;
         if (demo) setResult(demo);
+        else if (key) setError(`Failed to fetch live Yahoo Finance metrics for "${req.company}".`);
         else setError(`No demo data for "${req.company}". Try Nike, Nvidia, or Tesla.`);
         setOverlayOn(false);
         setStepsForRun([]);

@@ -1,7 +1,7 @@
 // READ instructions.txt before editing this file.
 // Hardcoded demo fixtures. Demo companies: Nike Sep 2024, Nvidia Aug 2024, Tesla Dec 2023
 
-import type { AnalysisResult } from "@/types";
+import type { AnalysisResult, FinancialMetrics } from "@/types";
 
 export const DEMO_RESULTS: Record<string, AnalysisResult> = {
 
@@ -18,15 +18,15 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
     metrics: {
       priceChangePercent: -19.6,
       peRatio: 20.4,
-      revenueGrowthQoQ: -0.102,
-      shortInterestPercent: 4.8,
-      analystSentimentScore: 42,
-      insiderTradingActivity: "light selling",
       epsSurprisePercent: 4.1,
       revenueSurprisePercent: -2.8,
       dividendChangePercent: 0,
       fcfChangeQoQ: -18.4,
-      analystBreakdown: { buy: 14, hold: 9, sell: 3 },
+      pegRatio: 2.1,
+      priceToBook: 8.7,
+      priceToSalesTtm: 2.3,
+      enterpriseValue: 145_000_000_000,
+      enterpriseToEbitda: 19.8,
     },
     culturalSignals: [
       { date: "Sep 7",  sentiment: "neg",     text: "Nike lowers FY25 revenue guidance; CEO Elliott Hill takes over amid DTC strategy pivot.", source: "Reuters · Bloomberg" },
@@ -71,15 +71,15 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
     metrics: {
       priceChangePercent: 36.8,
       peRatio: 68.2,
-      revenueGrowthQoQ: 0.152,
-      shortInterestPercent: 0.9,
-      analystSentimentScore: 94,
-      insiderTradingActivity: "neutral",
       epsSurprisePercent: 8.2,
       revenueSurprisePercent: 5.1,
       dividendChangePercent: 150,
       fcfChangeQoQ: 22.4,
-      analystBreakdown: { buy: 38, hold: 4, sell: 0 },
+      pegRatio: 1.9,
+      priceToBook: 41.3,
+      priceToSalesTtm: 24.7,
+      enterpriseValue: 2_900_000_000_000,
+      enterpriseToEbitda: 57.2,
     },
     culturalSignals: [
       { date: "Aug 6",  sentiment: "pos", text: "Blackwell GPU shipment acceleration confirmed — hyperscaler orders surge beyond capacity.", source: "The Verge · Ars Technica" },
@@ -122,15 +122,15 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
     metrics: {
       priceChangePercent: -13.2,
       peRatio: 47.1,
-      revenueGrowthQoQ: 0.032,
-      shortInterestPercent: 3.1,
-      analystSentimentScore: 52,
-      insiderTradingActivity: "light selling",
       epsSurprisePercent: -3.2,
       revenueSurprisePercent: -1.1,
       dividendChangePercent: null,
       fcfChangeQoQ: -12.8,
-      analystBreakdown: { buy: 18, hold: 16, sell: 8 },
+      pegRatio: 2.8,
+      priceToBook: 9.1,
+      priceToSalesTtm: 6.2,
+      enterpriseValue: 760_000_000_000,
+      enterpriseToEbitda: 38.5,
     },
     culturalSignals: [
       { date: "Dec 2",  sentiment: "neg",     text: "BYD officially surpasses Tesla in Q4 global EV deliveries for the first time — sustained negative press cycle begins.", source: "FT · Reuters" },
@@ -160,3 +160,37 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
     ],
   },
 };
+
+interface YahooMetricsResponse {
+  ticker: string;
+  timeframe: { month: number; year: number };
+  metrics: FinancialMetrics;
+}
+
+export async function getDemoResultWithLiveMetrics(key: string): Promise<AnalysisResult | null> {
+  const base = DEMO_RESULTS[key];
+  if (!base) return null;
+
+  try {
+    const params = new URLSearchParams({
+      ticker: base.ticker,
+      month: String(base.timeframe.month),
+      year: String(base.timeframe.year),
+    });
+    const res = await fetch(`/yahoo-metrics?${params.toString()}`);
+    if (!res.ok) return null;
+    const payload = (await res.json()) as YahooMetricsResponse;
+    if (!payload?.metrics) return null;
+
+    return {
+      ...base,
+      metrics: payload.metrics,
+      forumChart: {
+        ...base.forumChart,
+        deltaPrice: payload.metrics.priceChangePercent,
+      },
+    };
+  } catch {
+    return null;
+  }
+}

@@ -20,16 +20,16 @@ export interface AnalysisRequest {
 export interface FinancialMetrics {
   priceChangePercent: number;
   peRatio: number | null;
-  revenueGrowthQoQ: number | null;        // decimal, e.g. -0.102
-  shortInterestPercent: number | null;
-  analystSentimentScore: number | null;   // 0–100
-  insiderTradingActivity: "heavy buying" | "light buying" | "neutral" | "light selling" | "heavy selling" | null;
-  // Earnings signals
   epsSurprisePercent: number | null;      // e.g. +4.1 = beat by 4.1%
   revenueSurprisePercent: number | null;  // e.g. -2.8 = missed by 2.8%
   dividendChangePercent: number | null;   // null = no dividend
   fcfChangeQoQ: number | null;            // free cash flow % change
-  analystBreakdown: { buy: number; hold: number; sell: number } | null;
+  // Valuation metrics (Yahoo Finance)
+  pegRatio: number | null;
+  priceToBook: number | null;
+  priceToSalesTtm: number | null;
+  enterpriseValue: number | null;
+  enterpriseToEbitda: number | null;
 }
 
 export interface CulturalSignal {
