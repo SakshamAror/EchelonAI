@@ -8,7 +8,7 @@ interface Props {
   active: boolean;
   steps: AgentStep[];
   company: string;
-  monthLabel: string;
+  periodLabel: string;
 }
 
 const ICON: Record<AgentStep["status"], string> = {
@@ -18,7 +18,7 @@ const ICON: Record<AgentStep["status"], string> = {
   error:   "✕",
 };
 
-export default function AgentProgress({ active, steps, company, monthLabel }: Props) {
+export default function AgentProgress({ active, steps, company, periodLabel }: Props) {
   if (!active) return null;
   if (steps.length === 0) return null;
   const allDone = steps.every(s => s.status === "done" || s.status === "error");
@@ -40,7 +40,7 @@ export default function AgentProgress({ active, steps, company, monthLabel }: Pr
         {company.toUpperCase() || "ANALYZING"}
       </p>
       <p style={{ fontSize: 10, letterSpacing: "0.2em", color: "var(--text-muted)", marginTop: -16, marginBottom: 4 }}>
-        {monthLabel.toUpperCase()}
+        {periodLabel.toUpperCase()}
       </p>
 
       {/* Steps */}

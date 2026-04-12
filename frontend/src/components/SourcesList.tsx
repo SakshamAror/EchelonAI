@@ -3,7 +3,7 @@
 
 import type { Source } from "@/types";
 
-interface Props { sources: Source[] }
+interface Props { sources: Source[]; error?: string }
 
 const typeLabel: Record<Source["type"], string> = {
   news: "NEWS", filing: "SEC", forum: "FORUM", web: "WEB",
@@ -12,7 +12,24 @@ const typeColor: Record<Source["type"], string> = {
   news: "var(--accent)", filing: "var(--purple)", forum: "var(--green)", web: "var(--text-muted)",
 };
 
-export default function SourcesList({ sources }: Props) {
+export default function SourcesList({ sources, error }: Props) {
+  if (error) {
+    return (
+      <div className="panel-box fade-up fade-up-4" style={{ marginBottom: 0 }}>
+        <div className="panel-label">All Sources</div>
+        <div style={{
+          padding: 14,
+          border: "1px solid var(--red)",
+          background: "rgba(255,76,76,0.06)",
+          color: "var(--red)",
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}>
+          {error}
+        </div>
+      </div>
+    );
+  }
   if (sources.length === 0) return null;
   return (
     <div className="panel-box fade-up fade-up-4" style={{ marginBottom: 0 }}>

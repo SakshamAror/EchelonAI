@@ -1,1 +1,0 @@
-import"./demo-BbMYJF-Z.js";var e=`/api`;async function t(t){let n=await fetch(`${e}/analyze`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify(t)});if(!n.ok){let e=await n.json().catch(()=>({}));throw Error(e?.detail??`Request failed: ${n.status}`)}return n.json()}export{t as analyzeStock};

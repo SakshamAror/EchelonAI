@@ -4,11 +4,10 @@
 
 import type { AnalysisResult } from "@/types";
 
-interface Props { result: AnalysisResult }
+interface Props { result: AnalysisResult; error?: string }
 
-const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-function fmtTF({ month, year }: { month: number; year: number }) {
-  return `${MONTH_NAMES[month - 1]} ${year}`;
+function fmtTF({ quarter, year }: { quarter: number; year: number }) {
+  return `Q${quarter} ${year}`;
 }
 
 function ScoreBarRow({ label, value, color }: { label: string; value: number; color: string }) {
@@ -31,7 +30,25 @@ const dirConfig = {
   flat: { arrow: "→", color: "var(--accent)" },
 };
 
-export default function ScoreCard({ result }: Props) {
+export default function ScoreCard({ result, error }: Props) {
+  if (error) {
+    return (
+      <div className="panel-box fade-up fade-up-1">
+        <div className="panel-label">Forum Alpha Score</div>
+        <div style={{
+          padding: 14,
+          border: "1px solid var(--red)",
+          background: "rgba(255,76,76,0.06)",
+          color: "var(--red)",
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}>
+          {error}
+        </div>
+      </div>
+    );
+  }
+
   const dir = dirConfig[result.direction];
 
   return (

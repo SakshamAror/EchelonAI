@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface TimeFrame {
-  month: number; // 1–12
+  quarter: number; // 1–4
   year: number;
 }
 
@@ -77,9 +77,12 @@ export interface AnalysisResult {
   summary: string;
   sources: Source[];
   dataErrors?: {
+    scorecard?: string;
+    forumChart?: string;
     financial?: string;
     cultural?: string;
     synthesis?: string;
+    sources?: string;
   };
 }
 

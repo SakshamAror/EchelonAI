@@ -1,15 +1,14 @@
 // READ instructions.txt before editing this file.
-// Hardcoded demo fixtures. Demo companies: Nike Sep 2024, Nvidia Aug 2024, Tesla Dec 2023
+// Hardcoded demo fixtures. Demo companies: Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023
 
-import type { AnalysisResult, FinancialMetrics, TimeFrame } from "@/types";
+import type { AnalysisResult, FinancialMetrics, ReasoningPoint, TimeFrame } from "@/types";
 
 export const DEMO_RESULTS: Record<string, AnalysisResult> = {
-
-  // ─── NIKE Sep 2024 ────────────────────────────────────────────────────────
-  "NKE-9-2024": {
+  // ─── NIKE Q3 2024 ─────────────────────────────────────────────────────────
+  "NKE-Q3-2024": {
     ticker: "NKE",
     companyName: "Nike",
-    timeframe: { month: 9, year: 2024 },
+    timeframe: { quarter: 3, year: 2024 },
     direction: "down",
     alphaScore: 34,
     culturalScore: 28,
@@ -29,9 +28,9 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       enterpriseToEbitda: 19.8,
     },
     culturalSignals: [
-      { date: "Sep 7",  sentiment: "neg",     text: "Nike lowers FY25 revenue guidance; CEO Elliott Hill takes over amid DTC strategy pivot.", source: "Reuters · Bloomberg" },
-      { date: "Sep 14", sentiment: "neutral",  text: "Viral TikTok campaign resurfaces \"Just Do It\" nostalgia; Jordan brand moment spikes organic search.", source: "Hypebeast · Nia Index" },
-      { date: "Sep 22", sentiment: "neg",     text: "Short interest reaches 18-month high as institutional sell-off accelerates into quarter-end.", source: "WSJ · Forum Data" },
+      { date: "Sep 7", sentiment: "neg", text: "Nike lowers FY25 revenue guidance; CEO Elliott Hill takes over amid DTC strategy pivot.", source: "Reuters · Bloomberg" },
+      { date: "Sep 14", sentiment: "neutral", text: "Viral TikTok campaign resurfaces \"Just Do It\" nostalgia; Jordan brand moment spikes organic search.", source: "Hypebeast · Nia Index" },
+      { date: "Sep 22", sentiment: "neg", text: "Short interest reaches 18-month high as institutional sell-off accelerates into quarter-end.", source: "WSJ · Forum Data" },
     ],
     forumChart: {
       points: [38, 42, 45, 52, 48, 55, 75, 88, 72, 58, 50],
@@ -58,11 +57,11 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
     ],
   },
 
-  // ─── NVIDIA Aug 2024 ──────────────────────────────────────────────────────
-  "NVDA-8-2024": {
+  // ─── NVIDIA Q3 2024 ───────────────────────────────────────────────────────
+  "NVDA-Q3-2024": {
     ticker: "NVDA",
     companyName: "Nvidia",
-    timeframe: { month: 8, year: 2024 },
+    timeframe: { quarter: 3, year: 2024 },
     direction: "up",
     alphaScore: 91,
     culturalScore: 88,
@@ -82,7 +81,7 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       enterpriseToEbitda: 57.2,
     },
     culturalSignals: [
-      { date: "Aug 6",  sentiment: "pos", text: "Blackwell GPU shipment acceleration confirmed — hyperscaler orders surge beyond capacity.", source: "The Verge · Ars Technica" },
+      { date: "Aug 6", sentiment: "pos", text: "Blackwell GPU shipment acceleration confirmed — hyperscaler orders surge beyond capacity.", source: "The Verge · Ars Technica" },
       { date: "Aug 22", sentiment: "pos", text: "Q2 FY2025 earnings: revenue $30B vs $28.6B est. Jensen Huang calls demand for AI compute \"insane\".", source: "Nvidia IR · Bloomberg" },
       { date: "Aug 28", sentiment: "pos", text: "14 of 15 sell-side analysts raise price targets post-earnings; retail forum volume hits all-time high.", source: "Reuters · Forum Data" },
     ],
@@ -109,11 +108,11 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
     ],
   },
 
-  // ─── TESLA Dec 2023 ───────────────────────────────────────────────────────
-  "TSLA-12-2023": {
+  // ─── TESLA Q4 2023 ────────────────────────────────────────────────────────
+  "TSLA-Q4-2023": {
     ticker: "TSLA",
     companyName: "Tesla",
-    timeframe: { month: 12, year: 2023 },
+    timeframe: { quarter: 4, year: 2023 },
     direction: "down",
     alphaScore: 38,
     culturalScore: 45,
@@ -133,9 +132,9 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       enterpriseToEbitda: 38.5,
     },
     culturalSignals: [
-      { date: "Dec 2",  sentiment: "neg",     text: "BYD officially surpasses Tesla in Q4 global EV deliveries for the first time — sustained negative press cycle begins.", source: "FT · Reuters" },
-      { date: "Dec 11", sentiment: "neg",     text: "Elon Musk's X platform advertiser exodus intensifies; brand association risk elevated in brand safety surveys.", source: "NYT · Forum Data" },
-      { date: "Dec 20", sentiment: "neutral",  text: "Cybertruck deliveries begin but ramp disappointingly slow; early reviews cite build quality concerns.", source: "Ars Technica · Nia Index" },
+      { date: "Dec 2", sentiment: "neg", text: "BYD officially surpasses Tesla in Q4 global EV deliveries for the first time — sustained negative press cycle begins.", source: "FT · Reuters" },
+      { date: "Dec 11", sentiment: "neg", text: "Elon Musk's X platform advertiser exodus intensifies; brand association risk elevated in brand safety surveys.", source: "NYT · Forum Data" },
+      { date: "Dec 20", sentiment: "neutral", text: "Cybertruck deliveries begin but ramp disappointingly slow; early reviews cite build quality concerns.", source: "Ars Technica · Nia Index" },
     ],
     forumChart: {
       points: [68, 62, 58, 52, 48, 45, 42, 38, 36, 33, 30],
@@ -163,20 +162,54 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
 
 interface YahooMetricsResponse {
   ticker: string;
-  timeframe: { month: number; year: number };
+  timeframe: { quarter: number; year: number };
   metrics: FinancialMetrics;
 }
 
-interface GeminiReasoningItem {
-  text: string;
-  category: "financial" | "cultural" | "filing";
-  sourceIndices: number[];
+type DisplayedMetricKey = keyof FinancialMetrics;
+
+const DISPLAYED_METRIC_KEYS: DisplayedMetricKey[] = [
+  "priceChangePercent",
+  "peRatio",
+  "epsSurprisePercent",
+  "revenueSurprisePercent",
+  "dividendChangePercent",
+  "fcfChangeQoQ",
+  "pegRatio",
+  "priceToBook",
+  "priceToSalesTtm",
+  "enterpriseValue",
+  "enterpriseToEbitda",
+];
+
+const METRIC_LABEL: Record<DisplayedMetricKey, string> = {
+  priceChangePercent: "Price Change %",
+  peRatio: "P/E Ratio",
+  epsSurprisePercent: "EPS Surprise %",
+  revenueSurprisePercent: "Revenue Surprise %",
+  dividendChangePercent: "Dividend Change %",
+  fcfChangeQoQ: "FCF Change QoQ %",
+  pegRatio: "PEG Ratio",
+  priceToBook: "Price/Book",
+  priceToSalesTtm: "Price/Sales TTM",
+  enterpriseValue: "Enterprise Value",
+  enterpriseToEbitda: "EV/EBITDA",
+};
+
+interface LlmReasoningItem {
+  insight: string;
+  whyItMatters: string;
+  metricCitations: DisplayedMetricKey[];
+  culturalSignalCitations?: number[];
 }
 
-interface GeminiSynthesisResponse {
+interface LlmSynthesisResponse {
   summary: string;
-  summarySourceIndices: number[];
-  reasoning: GeminiReasoningItem[];
+  reasoning: LlmReasoningItem[];
+}
+
+function quarterLabel(timeframe: TimeFrame): string {
+  return `Q${timeframe.quarter} ${timeframe.year}`;
 }
 
 function emptyMetrics(): FinancialMetrics {
@@ -195,22 +228,304 @@ function emptyMetrics(): FinancialMetrics {
   };
 }
 
+function buildUnavailableForumChart(timeframe: TimeFrame, deltaPrice: number): AnalysisResult["forumChart"] {
+  const q = `Q${timeframe.quarter}`;
+  return {
+    points: [0, 0, 0],
+    labels: [`${q} start`, `${q} mid`, `${q} end`],
+    peakIndex: 0,
+    peakLabel: "N/A",
+    deltaForum: 0,
+    deltaPrice,
+  };
+}
+
+function fmtPct(v: number): string {
+  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
+}
+
+function fmtCompact(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  return v.toFixed(0);
+}
+
+function buildFinancialOnlySynthesis(
+  companyName: string,
+  timeframe: TimeFrame,
+  metrics: FinancialMetrics
+): { summary: string; reasoning: ReasoningPoint[] } {
+  const tfLabel = quarterLabel(timeframe);
+  const directionWord =
+    metrics.priceChangePercent > 1 ? "positive" : metrics.priceChangePercent < -1 ? "negative" : "mixed";
+
+  const summaryParts: string[] = [
+    `${companyName} showed a ${directionWord} setup in ${tfLabel} based on available Yahoo Finance metrics.`,
+    `Price moved ${fmtPct(metrics.priceChangePercent)} for the selected period.`,
+    "Interpretation is limited to metrics available in the current data pipeline for this period.",
+  ];
+
+  if (metrics.epsSurprisePercent != null) {
+    summaryParts.push(
+      `EPS surprise was ${fmtPct(metrics.epsSurprisePercent)} (${metrics.epsSurprisePercent >= 0 ? "beat" : "miss"}).`
+    );
+  }
+  if (metrics.revenueSurprisePercent != null) {
+    summaryParts.push(
+      `Revenue surprise was ${fmtPct(metrics.revenueSurprisePercent)} (${metrics.revenueSurprisePercent >= 0 ? "beat" : "miss"}).`
+    );
+  }
+
+  const reasoning: ReasoningPoint[] = [];
+  reasoning.push({
+    category: "financial",
+    text: `Price change for the selected quarter/year is ${fmtPct(metrics.priceChangePercent)}. Why it matters: this anchors direction and indicates whether other signals are being confirmed or contradicted by market movement.`,
+    sources: [],
+  });
+
+  if (metrics.epsSurprisePercent != null) {
+    reasoning.push({
+      category: "financial",
+      text: `EPS surprise is ${fmtPct(metrics.epsSurprisePercent)} (${metrics.epsSurprisePercent >= 0 ? "earnings beat estimates" : "earnings missed estimates"}). Why it matters: surprise magnitude helps explain whether expectations were reset upward or downward.`,
+      sources: [],
+    });
+  }
+
+  if (metrics.revenueSurprisePercent != null) {
+    reasoning.push({
+      category: "financial",
+      text: `Revenue surprise is ${fmtPct(metrics.revenueSurprisePercent)} (${metrics.revenueSurprisePercent >= 0 ? "revenue beat estimates" : "revenue missed estimates"}). Why it matters: revenue surprise informs whether demand strength supports the current narrative.`,
+      sources: [],
+    });
+  }
+
+  if (metrics.fcfChangeQoQ != null) {
+    reasoning.push({
+      category: "financial",
+      text: `Free cash flow changed ${fmtPct(metrics.fcfChangeQoQ)} quarter-over-quarter. Why it matters: cash-flow direction helps validate earnings quality and balance-sheet flexibility.`,
+      sources: [],
+    });
+  }
+
+  const valuationBits: string[] = [];
+  if (metrics.peRatio != null) valuationBits.push(`P/E ${metrics.peRatio.toFixed(2)}x`);
+  if (metrics.pegRatio != null) valuationBits.push(`PEG ${metrics.pegRatio.toFixed(2)}`);
+  if (metrics.priceToBook != null) valuationBits.push(`P/B ${metrics.priceToBook.toFixed(2)}x`);
+  if (metrics.priceToSalesTtm != null) valuationBits.push(`P/S ${metrics.priceToSalesTtm.toFixed(2)}x`);
+  if (metrics.enterpriseToEbitda != null) valuationBits.push(`EV/EBITDA ${metrics.enterpriseToEbitda.toFixed(2)}x`);
+
+  if (valuationBits.length > 0) {
+    reasoning.push({
+      category: "financial",
+      text: `Valuation snapshot: ${valuationBits.join(" · ")}. Why it matters: valuation multiples frame how much optimism or pessimism is already reflected in price.`,
+      sources: [],
+    });
+  }
+
+  return {
+    summary: summaryParts.join(" "),
+    reasoning: reasoning.slice(0, 4),
+  };
+}
+
+function isMetricKey(value: string): value is DisplayedMetricKey {
+  return DISPLAYED_METRIC_KEYS.includes(value as DisplayedMetricKey);
+}
+
+function metricValueText(key: DisplayedMetricKey, metrics: FinancialMetrics): string {
+  const value = metrics[key];
+  if (value == null) return "unavailable in current pipeline";
+  if (key === "enterpriseValue") return fmtCompact(value);
+  if (key === "priceChangePercent" || key === "epsSurprisePercent" || key === "revenueSurprisePercent" || key === "dividendChangePercent" || key === "fcfChangeQoQ") {
+    return fmtPct(value);
+  }
+  if (key === "peRatio" || key === "priceToBook" || key === "priceToSalesTtm" || key === "enterpriseToEbitda") return `${value.toFixed(2)}x`;
+  return value.toFixed(2);
+}
+
+function fallbackWhyItMatters(key: DisplayedMetricKey): string {
+  if (key === "priceChangePercent") return "This anchors short-horizon direction and helps confirm whether the rest of the evidence aligns with observed market behavior.";
+  if (key === "epsSurprisePercent") return "Earnings surprise changes near-term expectations and can influence how investors reprice future profitability.";
+  if (key === "revenueSurprisePercent") return "Revenue surprise is a direct signal of demand strength versus consensus assumptions.";
+  if (key === "dividendChangePercent") return "Dividend adjustments can indicate management confidence in recurring cash generation and capital allocation priorities.";
+  if (key === "fcfChangeQoQ") return "Free cash flow trend supports or weakens the quality of the earnings story by showing realized cash generation.";
+  if (key === "peRatio") return "P/E contextualizes how expensive or cheap earnings are being priced relative to current profitability.";
+  if (key === "pegRatio") return "PEG links valuation to expected growth, helping distinguish justified premium from pure multiple expansion.";
+  if (key === "priceToBook") return "Price/Book helps assess whether valuation is stretched relative to the accounting asset base.";
+  if (key === "priceToSalesTtm") return "Price/Sales indicates how aggressively top-line revenue is currently being valued by the market.";
+  if (key === "enterpriseValue") return "Enterprise value captures total firm value and improves comparability beyond equity market cap alone.";
+  return "EV/EBITDA frames valuation versus operating cash earnings and helps benchmark capital-structure-adjusted expensiveness.";
+}
+
+function isUnavailableNarrative(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("unavailable in the current pipeline") ||
+    lower.includes("cannot use it as explanatory evidence") ||
+    lower.includes("does not imply the company did not report") ||
+    lower.includes("did not report")
+  );
+}
+
+function normalizeUnavailableWording(text: string): string {
+  if (!text) return text;
+  let out = text;
+  out = out.replace(
+    /\b(company|issuer)\s+(has\s+)?(not|n't)\s+reported\b[^.]*\.?/gi,
+    "This value is unavailable in the current pipeline for this period, so we cannot use it as explanatory evidence; this does not imply the company did not report it."
+  );
+  out = out.replace(
+    /\b(did\s+not\s+report|not\s+reported)\b[^.]*\.?/gi,
+    "Unavailable in the current pipeline for this period; this does not imply company non-reporting."
+  );
+  return out;
+}
+
+function enrichSummary(summary: string, result: AnalysisResult): string {
+  const cleaned = normalizeUnavailableWording(summary).trim();
+  if (cleaned.length >= 360) return cleaned;
+  const unavailable = DISPLAYED_METRIC_KEYS.filter((k) => result.metrics[k] == null).map((k) => METRIC_LABEL[k]);
+  const caveat =
+    unavailable.length === 0
+      ? "All currently displayed metrics were usable in this interpretation, but the synthesis remains bounded to the provided dataset only."
+      : `Some displayed metrics were unavailable in the current pipeline (${unavailable.join(", ")}), so they could not be used as explanatory evidence; this does not imply the company did not report them.`;
+  return `${cleaned} ${caveat}`.trim();
+}
+
+async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmSynthesisResponse | null; error: string | null }> {
+  try {
+    const displayedMetrics = DISPLAYED_METRIC_KEYS.reduce<Record<string, number | null>>((acc, key) => {
+      acc[key] = result.metrics[key];
+      return acc;
+    }, {});
+
+    const displayedCulturalSignals = result.culturalSignals.map((signal, idx) => ({
+      index: idx + 1,
+      date: signal.date,
+      sentiment: signal.sentiment,
+      text: signal.text,
+      source: signal.source,
+    }));
+
+    const res = await fetch("/alpha-synthesis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticker: result.ticker,
+        companyName: result.companyName,
+        timeframe: result.timeframe,
+        displayedMetricKeys: DISPLAYED_METRIC_KEYS,
+        displayedMetrics,
+        displayedCulturalSignals,
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await extractErrorDetail(res, `LLM synthesis request failed (${res.status})`);
+      return { payload: null, error: detail };
+    }
+
+    const payload = (await res.json()) as LlmSynthesisResponse;
+    if (!payload || typeof payload.summary !== "string" || !Array.isArray(payload.reasoning)) {
+      return { payload: null, error: "LLM returned invalid synthesis payload" };
+    }
+
+    const seenMetricKeys = new Set<DisplayedMetricKey>();
+    const seenSignalIdx = new Set<number>();
+    const validReasoning: LlmReasoningItem[] = [];
+
+    for (const raw of payload.reasoning) {
+      if (!raw || typeof raw.insight !== "string" || typeof raw.whyItMatters !== "string") continue;
+      const metricCitations = Array.isArray(raw.metricCitations)
+        ? raw.metricCitations.filter(
+            (k): k is DisplayedMetricKey =>
+              typeof k === "string" && isMetricKey(k) && result.metrics[k] != null
+          )
+        : [];
+      const culturalSignalCitations = Array.isArray(raw.culturalSignalCitations)
+        ? raw.culturalSignalCitations.filter((idx): idx is number => Number.isInteger(idx) && idx >= 1 && idx <= result.culturalSignals.length)
+        : [];
+      if (metricCitations.length === 0 && culturalSignalCitations.length === 0) continue;
+      let insight = normalizeUnavailableWording(raw.insight.trim());
+      let whyItMatters = normalizeUnavailableWording(raw.whyItMatters.trim());
+      if (isUnavailableNarrative(insight) || isUnavailableNarrative(whyItMatters)) continue;
+      metricCitations.forEach((k) => seenMetricKeys.add(k));
+      culturalSignalCitations.forEach((idx) => seenSignalIdx.add(idx));
+      validReasoning.push({
+        insight,
+        whyItMatters,
+        metricCitations,
+        culturalSignalCitations,
+      });
+    }
+
+    if (validReasoning.length === 0) {
+      return { payload: null, error: "LLM returned no valid cited reasoning items" };
+    }
+
+    const availableMetricKeys = DISPLAYED_METRIC_KEYS.filter((k) => result.metrics[k] != null);
+    const missingMetricKeys = availableMetricKeys.filter((k) => !seenMetricKeys.has(k));
+    for (const key of missingMetricKeys) {
+      validReasoning.push({
+        insight: `${METRIC_LABEL[key]} is ${metricValueText(key, result.metrics)}.`,
+        whyItMatters: fallbackWhyItMatters(key),
+        metricCitations: [key],
+        culturalSignalCitations: [],
+      });
+    }
+
+    const missingSignalIdx: number[] = [];
+    for (let idx = 1; idx <= result.culturalSignals.length; idx++) {
+      if (!seenSignalIdx.has(idx)) missingSignalIdx.push(idx);
+    }
+    for (const idx of missingSignalIdx) {
+      const sig = result.culturalSignals[idx - 1];
+      validReasoning.push({
+        insight: `Cultural signal ${idx}: ${sig.text}`,
+        whyItMatters: "It captures external narrative pressure that can affect sentiment and positioning.",
+        metricCitations: [],
+        culturalSignalCitations: [idx],
+      });
+    }
+
+    return {
+      payload: {
+        summary: enrichSummary(payload.summary, result),
+        reasoning: validReasoning.slice(0, 10),
+      },
+      error: null,
+    };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "LLM synthesis request failed";
+    return { payload: null, error: detail };
+  }
+}
+
 function makeErrorResult(base: AnalysisResult, timeframe: TimeFrame, message: string): AnalysisResult {
+  const unavailable = `Unavailable: ${message}`;
   return {
     ...base,
     timeframe,
+    alphaScore: 0,
+    culturalScore: 0,
+    financialScore: 0,
+    forumMomentumScore: 0,
+    direction: "flat",
     metrics: emptyMetrics(),
     culturalSignals: [],
     summary: "",
     reasoning: [],
-    forumChart: {
-      ...base.forumChart,
-      deltaPrice: 0,
-    },
+    sources: [],
+    forumChart: buildUnavailableForumChart(timeframe, 0),
     dataErrors: {
-      financial: message,
-      cultural: message,
-      synthesis: message,
+      scorecard: unavailable,
+      forumChart: unavailable,
+      financial: unavailable,
+      cultural: unavailable,
+      synthesis: unavailable,
+      sources: unavailable,
     },
   };
 }
@@ -225,60 +540,6 @@ async function extractErrorDetail(res: Response, fallback: string): Promise<stri
   }
 }
 
-async function getGeminiSynthesis(
-  result: AnalysisResult
-): Promise<{ payload: GeminiSynthesisResponse | null; error: string | null }> {
-  try {
-    const res = await fetch("/alpha-synthesis", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ticker: result.ticker,
-        companyName: result.companyName,
-        timeframe: result.timeframe,
-        direction: result.direction,
-        alphaScore: result.alphaScore,
-        culturalScore: result.culturalScore,
-        financialScore: result.financialScore,
-        forumMomentumScore: result.forumMomentumScore,
-        metrics: result.metrics,
-        culturalSignals: result.culturalSignals,
-        forumChart: result.forumChart,
-        sources: result.sources,
-      }),
-    });
-    if (!res.ok) {
-      const detail = await extractErrorDetail(res, `Gemini synthesis request failed (${res.status})`);
-      return { payload: null, error: detail };
-    }
-    const payload = (await res.json()) as GeminiSynthesisResponse;
-    if (!payload?.summary || !Array.isArray(payload.reasoning) || !Array.isArray(payload.summarySourceIndices)) {
-      return { payload: null, error: "Gemini returned invalid synthesis response" };
-    }
-    const sourceCount = result.sources.length;
-    const isValidIdx = (idx: number) => Number.isInteger(idx) && idx >= 1 && idx <= sourceCount;
-    const summaryHasCitations =
-      payload.summarySourceIndices.length > 0 &&
-      payload.summarySourceIndices.every(isValidIdx);
-    if (!summaryHasCitations) {
-      return { payload: null, error: "Gemini summary is missing valid source citations" };
-    }
-
-    for (const item of payload.reasoning) {
-      if (!item?.text || !item?.category || !Array.isArray(item.sourceIndices)) {
-        return { payload: null, error: "Gemini returned malformed reasoning item" };
-      }
-      if (item.sourceIndices.length === 0 || !item.sourceIndices.every(isValidIdx)) {
-        return { payload: null, error: "Gemini reasoning contains invalid or missing source citations" };
-      }
-    }
-    return { payload, error: null };
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "Gemini synthesis request failed";
-    return { payload: null, error: detail };
-  }
-}
-
 export async function getDemoResultWithLiveMetrics(
   key: string,
   timeframe: TimeFrame
@@ -289,7 +550,7 @@ export async function getDemoResultWithLiveMetrics(
   try {
     const params = new URLSearchParams({
       ticker: base.ticker,
-      month: String(timeframe.month),
+      quarter: String(timeframe.quarter),
       year: String(timeframe.year),
     });
     const res = await fetch(`/yahoo-metrics?${params.toString()}`);
@@ -302,52 +563,60 @@ export async function getDemoResultWithLiveMetrics(
       return makeErrorResult(base, timeframe, "Financial fetch error: invalid Yahoo metrics payload");
     }
 
+    const liveDirection: AnalysisResult["direction"] =
+      payload.metrics.priceChangePercent > 1
+        ? "up"
+        : payload.metrics.priceChangePercent < -1
+          ? "down"
+          : "flat";
+
     const resultWithLiveMetrics: AnalysisResult = {
       ...base,
       timeframe,
+      direction: liveDirection,
+      alphaScore: 0,
+      culturalScore: 0,
+      financialScore: 0,
+      forumMomentumScore: 0,
       metrics: payload.metrics,
-      forumChart: {
-        ...base.forumChart,
-        deltaPrice: payload.metrics.priceChangePercent,
-      },
+      culturalSignals: [],
+      forumChart: buildUnavailableForumChart(timeframe, payload.metrics.priceChangePercent),
+      ...buildFinancialOnlySynthesis(base.companyName, timeframe, payload.metrics),
+      sources: [],
       dataErrors: {
-        cultural: "Cultural signals are still static demo data until live cultural pipeline is connected.",
+        scorecard: "Score block is hidden because alpha/cultural/forum scoring is not yet computed from live feeds.",
+        forumChart: "Forum chart hidden: live forum attention timeseries is not connected.",
+        cultural: "Cultural signals hidden: live cultural feed is not connected.",
+        sources: "Sources panel hidden: no live source ingestion is connected.",
       },
     };
 
-    const { payload: synthesis, error: synthesisError } = await getGeminiSynthesis(resultWithLiveMetrics);
-    if (!synthesis) {
+    const { payload: llm, error: llmError } = await getGroqSynthesis(resultWithLiveMetrics);
+    if (!llm) {
       return {
         ...resultWithLiveMetrics,
-        summary: "",
-        reasoning: [],
         dataErrors: {
           ...resultWithLiveMetrics.dataErrors,
-          synthesis: `Synthesis error: ${synthesisError ?? "unknown Gemini failure"}`,
+          synthesis: `Synthesis error: ${llmError ?? "unknown LLM failure"}`,
         },
       };
     }
 
-    const mappedReasoning = synthesis.reasoning
-      .filter((item) => item?.text && item?.category)
+    const mappedReasoning: ReasoningPoint[] = llm.reasoning
+      .filter((item) => !isUnavailableNarrative(`${item.insight} ${item.whyItMatters}`))
       .map((item) => {
-        const pickedSources = (item.sourceIndices ?? [])
-          .map((idx) => resultWithLiveMetrics.sources[idx - 1])
-          .filter(Boolean);
+        const combined = `${item.insight} Why it matters: ${item.whyItMatters}`.trim();
+
         return {
-          text: item.text,
-          category: item.category,
-          sources: pickedSources.length > 0 ? pickedSources : resultWithLiveMetrics.sources.slice(0, 1),
+          text: combined,
+          category: (item.culturalSignalCitations?.length ?? 0) > 0 ? "cultural" : "financial",
+          sources: [],
         };
       });
 
-    const summaryCitationTags = Array.from(new Set(synthesis.summarySourceIndices))
-      .map((idx) => `[${idx}]`)
-      .join("");
-
     return {
       ...resultWithLiveMetrics,
-      summary: `${synthesis.summary} ${summaryCitationTags}`.trim(),
+      summary: llm.summary,
       reasoning: mappedReasoning.length > 0 ? mappedReasoning : resultWithLiveMetrics.reasoning,
     };
   } catch (err) {

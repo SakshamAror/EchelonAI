@@ -5,9 +5,26 @@
 
 import type { ForumChartData } from "@/types";
 
-interface Props { data: ForumChartData }
+interface Props { data: ForumChartData; error?: string }
 
-export default function ForumChart({ data }: Props) {
+export default function ForumChart({ data, error }: Props) {
+  if (error) {
+    return (
+      <div className="panel-box">
+        <div className="panel-label">Forum Attention / Price</div>
+        <div style={{
+          padding: 14,
+          border: "1px solid var(--red)",
+          background: "rgba(255,76,76,0.06)",
+          color: "var(--red)",
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}>
+          {error}
+        </div>
+      </div>
+    );
+  }
   const { points, labels, peakIndex, peakLabel, deltaForum, deltaPrice } = data;
   const W = 400, H = 80;
   const n = points.length;

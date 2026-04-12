@@ -12,9 +12,9 @@ const USE_DEMO = true;
 const BYPASS_DEMO_AGENT_PROGRESS = false;
 
 const DEMO_KEY_MAP: Record<string, string> = {
-  nike:   "NKE-9-2024",
-  nvidia: "NVDA-8-2024",
-  tesla:  "TSLA-12-2023",
+  nike:   "NKE-Q3-2024",
+  nvidia: "NVDA-Q3-2024",
+  tesla:  "TSLA-Q4-2023",
 };
 
 const DEFAULT_STEPS: AgentStep[] = [
@@ -23,7 +23,7 @@ const DEFAULT_STEPS: AgentStep[] = [
   { id: "edgar",      label: "Fetching 10-Q / 10-K from SEC EDGAR",         status: "pending" },
   { id: "nia",        label: "Indexing filings into Nia · querying MD&A",   status: "pending" },
   { id: "metrics",    label: "Running Omnara financial agent · yfinance",   status: "pending" },
-  { id: "synthesize", label: "Synthesizing Alpha Score · Gemini 2.0 Flash", status: "pending" },
+  { id: "synthesize", label: "Synthesizing Alpha Score · Groq LLM", status: "pending" },
 ];
 
 function simulateSteps(
@@ -141,7 +141,7 @@ export default function App() {
     }
   }
 
-  const monthLabel = lastReq ? periodLabel(lastReq.timeframe) : "";
+  const selectedPeriodLabel = lastReq ? periodLabel(lastReq.timeframe) : "";
   const showProgressOverlay = overlayOn && loading;
 
   return (
@@ -207,7 +207,7 @@ export default function App() {
         active={showProgressOverlay}
         steps={steps}
         company={lastReq?.company ?? ""}
-        monthLabel={monthLabel}
+        periodLabel={selectedPeriodLabel}
       />
 
       {/* ── Fixed status bar ─────────────────────────────────────── */}

@@ -4,7 +4,7 @@
  * Live Yahoo Finance -> FinancialMetrics mapper.
  *
  * Usage:
- *   npm run metrics:yahoo -- --ticker NVDA --month 8 --year 2024
+ *   npm run metrics:yahoo -- --ticker NVDA --quarter 3 --year 2024
  */
 
 import YahooFinance from "yahoo-finance2";
@@ -13,33 +13,26 @@ const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
 function usageAndExit() {
   console.error(
-    "Usage: node scripts/fetch-yfinance-metrics.mjs --ticker <SYMBOL> --month <1-12> --year <YYYY>"
+    "Usage: node scripts/fetch-yfinance-metrics.mjs --ticker <SYMBOL> --quarter <1-4> --year <YYYY>"
   );
   process.exit(1);
 }
 
 function parseArgs(argv) {
-  const args = { ticker: "", month: 0, year: 0 };
+  const args = { ticker: "", quarter: 0, year: 0 };
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (token === "--ticker") args.ticker = (argv[i + 1] ?? "").toUpperCase();
-    if (token === "--month") args.month = Number(argv[i + 1]);
+    if (token === "--quarter") args.quarter = Number(argv[i + 1]);
     if (token === "--year") args.year = Number(argv[i + 1]);
   }
-  if (!args.ticker || !Number.isInteger(args.month) || !Number.isInteger(args.year)) {
+  if (!args.ticker || !Number.isInteger(args.quarter) || !Number.isInteger(args.year)) {
     usageAndExit();
   }
-  if (args.month < 1 || args.month > 12 || args.year < 1970 || args.year > 2100) {
+  if (args.quarter < 1 || args.quarter > 4 || args.year < 1970 || args.year > 2100) {
     usageAndExit();
   }
   return args;
-}
-
-function quarterFromMonth(month) {
-  if (month <= 3) return 1;
-  if (month <= 6) return 2;
-  if (month <= 9) return 3;
-  return 4;
 }
 
 function quarterBounds(year, quarter) {
@@ -47,13 +40,6 @@ function quarterBounds(year, quarter) {
   return {
     start: new Date(Date.UTC(year, startMonth, 1, 0, 0, 0)),
     end: new Date(Date.UTC(year, startMonth + 3, 0, 23, 59, 59)),
-  };
-}
-
-function monthBounds(year, month) {
-  return {
-    start: new Date(Date.UTC(year, month - 1, 1, 0, 0, 0)),
-    end: new Date(Date.UTC(year, month, 0, 23, 59, 59)),
   };
 }
 
@@ -137,11 +123,11 @@ function extractEarningsSurprises(quoteSummary, targetEnd) {
   return { epsSurprisePercent, revenueSurprisePercent };
 }
 
-function priceChangeFromChart(chart, monthStart, monthEnd) {
+function priceChangeFromChart(chart, periodStart, periodEnd) {
   const closes = chart?.quotes ?? [];
   const clean = closes
     .filter((q) => q?.date && q?.close != null)
-    .filter((q) => q.date >= monthStart && q.date <= monthEnd)
+    .filter((q) => q.date >= periodStart && q.date <= periodEnd)
     .map((q) => q.close)
     .filter((v) => typeof v === "number" && Number.isFinite(v));
 
@@ -149,8 +135,7 @@ function priceChangeFromChart(chart, monthStart, monthEnd) {
   return safePercentDelta(clean[clean.length - 1], clean[0]);
 }
 
-function extractDividendChangePercent(chart, year, month) {
-  const quarter = quarterFromMonth(month);
+function extractDividendChangePercent(chart, year, quarter) {
   const prevQuarter = quarter === 1 ? 4 : quarter - 1;
   const prevYear = quarter === 1 ? year - 1 : year;
   const currentBounds = quarterBounds(year, quarter);
@@ -172,13 +157,12 @@ function extractDividendChangePercent(chart, year, month) {
   return ((currentTotal - prevTotal) / Math.abs(prevTotal)) * 100;
 }
 
-async function fetchFinancialMetrics({ ticker, month, year }) {
-  const targetQuarter = quarterFromMonth(month);
+async function fetchFinancialMetrics({ ticker, quarter, year }) {
+  const targetQuarter = quarter;
   const targetBounds = quarterBounds(year, targetQuarter);
   const prevQuarter = targetQuarter === 1 ? 4 : targetQuarter - 1;
   const prevQuarterYear = targetQuarter === 1 ? year - 1 : year;
   const prevBounds = quarterBounds(prevQuarterYear, prevQuarter);
-  const monthRange = monthBounds(year, month);
 
   const summaryModules = [
     "summaryDetail",
@@ -205,14 +189,14 @@ async function fetchFinancialMetrics({ ticker, month, year }) {
   );
 
   const metrics = {
-    priceChangePercent: priceChangeFromChart(chart, monthRange.start, monthRange.end) ?? 0,
+    priceChangePercent: priceChangeFromChart(chart, targetBounds.start, targetBounds.end) ?? 0,
     peRatio:
       num(quoteSummary?.summaryDetail?.trailingPE) ??
       num(quoteSummary?.summaryDetail?.forwardPE) ??
       null,
     epsSurprisePercent,
     revenueSurprisePercent,
-    dividendChangePercent: extractDividendChangePercent(chart, year, month),
+    dividendChangePercent: extractDividendChangePercent(chart, year, quarter),
     fcfChangeQoQ: extractFcfChangeQoQ(quoteSummary, targetBounds.end),
     pegRatio: num(quoteSummary?.defaultKeyStatistics?.pegRatio),
     priceToBook: num(quoteSummary?.defaultKeyStatistics?.priceToBook),
@@ -229,7 +213,7 @@ async function fetchFinancialMetrics({ ticker, month, year }) {
 
   return {
     ticker,
-    timeframe: { month, year },
+    timeframe: { quarter, year },
     metrics,
     pulledFrom: {
       provider: "Yahoo Finance",

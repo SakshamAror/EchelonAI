@@ -1,5 +1,5 @@
 // READ instructions.txt before editing this file.
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { execFile } from "node:child_process";
@@ -12,16 +12,16 @@ const yahooScriptPath = path.resolve(__dirname, "./scripts/fetch-yfinance-metric
 interface AlphaSynthesisInput {
   ticker: string;
   companyName: string;
-  timeframe: { month: number; year: number };
-  direction: "up" | "down" | "flat";
-  alphaScore: number;
-  culturalScore: number;
-  financialScore: number;
-  forumMomentumScore: number;
-  metrics: Record<string, unknown>;
-  culturalSignals: unknown[];
-  forumChart: Record<string, unknown>;
-  sources: unknown[];
+  timeframe: { quarter: number; year: number };
+  displayedMetricKeys: string[];
+  displayedMetrics: Record<string, number | null>;
+  displayedCulturalSignals: Array<{
+    index: number;
+    date: string;
+    sentiment: string;
+    text: string;
+    source: string;
+  }>;
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -33,15 +33,15 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return raw ? JSON.parse(raw) : {};
 }
 
-function buildGeminiPrompt(input: AlphaSynthesisInput) {
+function buildSynthesisPrompt(input: AlphaSynthesisInput) {
   const schema = {
     summary: "string",
-    summarySourceIndices: [1, 2],
     reasoning: [
       {
-        text: "string",
-        category: "financial | cultural | filing",
-        sourceIndices: [1, 2],
+        insight: "string",
+        whyItMatters: "string",
+        metricCitations: ["priceChangePercent", "epsSurprisePercent"],
+        culturalSignalCitations: [1, 2],
       },
     ],
   };
@@ -51,58 +51,83 @@ You are a financial+cultural signal synthesis analyst.
 Task: write Alpha Synthesis from ONLY the provided dataset.
 Do not invent facts, dates, or numbers.
 Do not give investment advice.
+Do not use any outside knowledge.
+Do not cite anything outside the allowed keys/indices.
 
 Output must be strict JSON following this shape:
 ${JSON.stringify(schema, null, 2)}
 
 Rules:
-1) summary: 2-3 sentences, clear causal narrative.
-2) summarySourceIndices: include 1-3 source indices that support the summary.
-3) reasoning: 3 to 4 bullets.
-4) Every reasoning item must use category: financial, cultural, or filing.
-5) Every reasoning item must include sourceIndices pointing to provided sources (1-based indices).
-6) If data is mixed or weak, explicitly state uncertainty in summary.
-7) Keep wording concise and high-signal; no hype.
-8) Cite only indices that exist in DATA.sources.
+1) summary: 5-8 sentences with clear causal interpretation and confidence caveats.
+2) reasoning: 6-10 items, most important first.
+3) Each reasoning item MUST include:
+   - insight: concise statement of what the cited data point shows (max 1 sentence)
+   - whyItMatters: concise implication (max 2 short sentences)
+4) metricCitations must contain ONLY values from DATA.displayedMetricKeys.
+5) culturalSignalCitations must contain ONLY valid indices from DATA.displayedCulturalSignals.index.
+6) Every reasoning item must cite at least one metric or one cultural signal.
+7) Across all reasoning items, cover ALL metric keys in DATA.displayedMetricKeys at least once.
+8) If DATA.displayedCulturalSignals is non-empty, cover ALL cultural signal indices at least once.
+9) Do not create a reasoning item for any metric whose value is null.
+10) If a metric is null, do not cite it in reasoning; you may mention data limitations in summary only.
+11) Never claim or imply "the company did not report" unless that exact claim exists in DATA.
+12) If DATA.displayedCulturalSignals is empty, keep synthesis financial-only.
+13) Do not mention any metric name not present in DATA.displayedMetricKeys.
+14) Keep wording high-signal, no hype, no generic filler.
+15) Order reasoning items from most important to least important.
 
 DATA:
 ${JSON.stringify(input, null, 2)}
   `.trim();
 }
 
-async function callGeminiSynthesis(input: AlphaSynthesisInput) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+function parseJsonContent(raw: string) {
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "");
+  return JSON.parse(cleaned);
+}
 
-  const prompt = buildGeminiPrompt(input);
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+async function callGroqSynthesis(input: AlphaSynthesisInput, apiKey: string, model: string) {
+  if (!apiKey) throw new Error("Missing GROQ_API_KEY");
 
-  const res = await fetch(url, {
+  const prompt = buildSynthesisPrompt(input);
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-      },
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a data-grounded financial and cultural synthesis assistant. Use only provided data and return strict JSON only.",
+        },
+        { role: "user", content: prompt },
+      ],
     }),
   });
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Gemini error ${res.status}: ${detail}`);
+    throw new Error(`Groq error ${res.status}: ${detail}`);
   }
 
   const json = await res.json();
-  const text: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini returned empty content");
+  const text: string | undefined = json?.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Groq returned empty content");
 
-  return JSON.parse(text);
+  return parseJsonContent(text);
 }
 
-function yahooMetricsDevPlugin() {
+function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string) {
   return {
     name: "yahoo-metrics-dev-endpoint",
     configureServer(server: import("vite").ViteDevServer) {
@@ -117,13 +142,13 @@ function yahooMetricsDevPlugin() {
 
         const url = new URL(req.url, "http://localhost");
         const ticker = (url.searchParams.get("ticker") ?? "").toUpperCase();
-        const month = Number(url.searchParams.get("month"));
+        const quarter = Number(url.searchParams.get("quarter"));
         const year = Number(url.searchParams.get("year"));
 
-        if (!ticker || !Number.isInteger(month) || !Number.isInteger(year)) {
+        if (!ticker || !Number.isInteger(quarter) || !Number.isInteger(year)) {
           res.statusCode = 400;
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ detail: "Missing or invalid ticker/month/year query params" }));
+          res.end(JSON.stringify({ detail: "Missing or invalid ticker/quarter/year query params" }));
           return;
         }
 
@@ -133,7 +158,7 @@ function yahooMetricsDevPlugin() {
             [
               yahooScriptPath,
               "--ticker", ticker,
-              "--month", String(month),
+              "--quarter", String(quarter),
               "--year", String(year),
             ],
             {
@@ -164,7 +189,7 @@ function yahooMetricsDevPlugin() {
 
         try {
           const body = (await readJsonBody(req)) as AlphaSynthesisInput;
-          const result = await callGeminiSynthesis(body);
+          const result = await callGroqSynthesis(body, groqApiKey, groqModel);
           res.statusCode = 200;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(result));
@@ -179,16 +204,22 @@ function yahooMetricsDevPlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), yahooMetricsDevPlugin()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const groqApiKey = env.GROQ_API_KEY || process.env.GROQ_API_KEY || "";
+  const groqModel = env.GROQ_MODEL || process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
+  return {
+    plugins: [react(), yahooMetricsDevPlugin(groqApiKey, groqModel)],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
-  },
-  server: {
-    proxy: {
-      "/api": "http://localhost:8000",
+    server: {
+      proxy: {
+        "/api": "http://localhost:8000",
+      },
     },
-  },
+  };
 });

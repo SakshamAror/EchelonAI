@@ -1,5 +1,5 @@
 // READ instructions.txt before editing this file.
-// Horizontal input row: company field + month select + analyze button.
+// Horizontal input row: company field + quarter select + analyze button.
 // Keep form logic here, not in App.tsx.
 
 import { useState } from "react";
@@ -10,22 +10,22 @@ interface Props {
   loading: boolean;
 }
 
-const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
-];
 const MIN_YEAR = 2021;
+
+function currentQuarterFromDate(d: Date) {
+  return Math.floor(d.getMonth() / 3) + 1;
+}
 
 function buildPeriodOptions(): TimeFrame[] {
   const now = new Date();
   const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
+  const currentQuarter = currentQuarterFromDate(now);
   const options: TimeFrame[] = [];
 
   for (let year = currentYear; year >= MIN_YEAR; year--) {
-    const startMonth = year === currentYear ? currentMonth : 12;
-    for (let month = startMonth; month >= 1; month--) {
-      options.push({ month, year });
+    const startQuarter = year === currentYear ? currentQuarter : 4;
+    for (let quarter = startQuarter; quarter >= 1; quarter--) {
+      options.push({ quarter, year });
     }
   }
 
@@ -34,15 +34,15 @@ function buildPeriodOptions(): TimeFrame[] {
 
 const PERIOD_OPTIONS: TimeFrame[] = buildPeriodOptions();
 
-export function periodLabel({ month, year }: TimeFrame) {
-  return `${MONTH_NAMES[month - 1]} ${year}`;
+export function periodLabel({ quarter, year }: TimeFrame) {
+  return `Q${quarter} ${year}`;
 }
-function periodValue({ month, year }: TimeFrame) { return `${month}-${year}`; }
+function periodValue({ quarter, year }: TimeFrame) { return `${quarter}-${year}`; }
 
 const DEMO_SUGGESTIONS = [
-  { company: "Nike",   timeframe: { month: 9,  year: 2024 } },
-  { company: "Nvidia", timeframe: { month: 8,  year: 2024 } },
-  { company: "Tesla",  timeframe: { month: 12, year: 2023 } },
+  { company: "Nike",   timeframe: { quarter: 3, year: 2024 } },
+  { company: "Nvidia", timeframe: { quarter: 3, year: 2024 } },
+  { company: "Tesla",  timeframe: { quarter: 4, year: 2023 } },
 ];
 
 const BASE: React.CSSProperties = {
@@ -59,7 +59,7 @@ const BASE: React.CSSProperties = {
 
 export default function SearchForm({ onSubmit, loading }: Props) {
   const [company,   setCompany]   = useState("");
-  const [timeframe, setTimeframe] = useState<TimeFrame>({ month: 10, year: 2024 });
+  const [timeframe, setTimeframe] = useState<TimeFrame>(PERIOD_OPTIONS[0] ?? { quarter: 1, year: new Date().getFullYear() });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,7 +78,7 @@ export default function SearchForm({ onSubmit, loading }: Props) {
         </div>
         <div style={{ flex: 1 }}>
           <label style={{ fontSize: 9, letterSpacing: "0.2em", color: "var(--text-muted)", textTransform: "uppercase" }}>
-            Month
+            Quarter
           </label>
         </div>
         <div style={{ width: 120 }} />
@@ -92,13 +92,13 @@ export default function SearchForm({ onSubmit, loading }: Props) {
           type="text"
           value={company}
           onChange={e => setCompany(e.target.value)}
-          placeholder="e.g. Nike, Ozempic, Taylor Swift..."
+          placeholder="e.g. Nike, Nvidia, Tesla..."
           disabled={loading}
           onFocus={e => { e.currentTarget.style.borderColor = "var(--accent-dim)"; }}
           onBlur={e  => { e.currentTarget.style.borderColor = "var(--border)"; }}
         />
 
-        {/* Month select */}
+        {/* Quarter select */}
         <div style={{ flex: 1, position: "relative" }}>
           <select
             style={{
@@ -111,8 +111,8 @@ export default function SearchForm({ onSubmit, loading }: Props) {
             }}
             value={periodValue(timeframe)}
             onChange={e => {
-              const [m, y] = e.target.value.split("-");
-              setTimeframe({ month: Number(m), year: Number(y) });
+              const [q, y] = e.target.value.split("-");
+              setTimeframe({ quarter: Number(q), year: Number(y) });
             }}
             disabled={loading}
           >
