@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg:        #141414;
+    --surface:   #1e1e1e;
+    --surface-2: #252525;
+    --border:    #333333;
+    --border-2:  #444444;
+    --text:      #f0ede8;
+    --text-muted:#888888;
+    --text-dim:  #4a4a4a;
+    --accent:    #f5a623;
+    --accent-h:  #e09510;
+    --red:       #ef4444;
+    --green:     #4ade80;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+}
+
+@layer utilities {
+  .font-display { font-family: 'Instrument Serif', Georgia, serif; }
+  .font-mono    { font-family: 'Space Mono', monospace; }
+}

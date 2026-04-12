@@ -1,0 +1,86 @@
+# AIStockScreener — AI Collaboration Instructions
+# ================================================
+# READ THIS FILE BEFORE MAKING ANY CHANGES TO THIS PROJECT.
+#
+# Purpose: Reduce merge conflicts and enable parallel team collaboration.
+# This project is built by multiple people + AI agents simultaneously.
+# Follow these rules strictly to avoid stomping on each other's work.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# MODULAR EDIT POLICY
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. DO NOT rewrite existing files wholesale. Make targeted, surgical edits.
+# 2. If you need to add a major feature (new tool, new agent, new UI section),
+#    create a NEW file for it rather than embedding it in an existing file.
+# 3. Each tool/agent lives in its own file under backend/tools/ or backend/agents/.
+# 4. Each UI section lives in its own component under frontend/src/components/.
+# 5. Wire things together only in the designated integration points:
+#    - Backend: backend/agent/orchestrator.py (imports tools from tools/)
+#    - Frontend: frontend/src/App.tsx (imports components from components/)
+#    - API types: frontend/src/types/index.ts (shared TypeScript types)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# DIRECTORY LAYOUT
+# ─────────────────────────────────────────────────────────────────────────────
+# frontend/                   React + Tailwind UI
+#   src/
+#     App.tsx                 Root — only import/layout, no logic
+#     types/index.ts          All shared TypeScript types (edit carefully)
+#     api/index.ts            Fetch wrappers — add new endpoints here
+#     components/
+#       SearchForm.tsx        Stock + timeframe input form
+#       ResultsPanel.tsx      Renders full analysis output
+#       ScoreCard.tsx         Alpha/Cultural/Financial score display
+#       MetricsPanel.tsx      Financial metrics table
+#       SourcesList.tsx       Cited sources list
+#       AgentProgress.tsx     Real-time agent step display
+#       ui/                   shadcn-style primitives (don't touch unless fixing bugs)
+#
+# backend/                    Python FastAPI backend
+#   main.py                   FastAPI app entry point
+#   agent/
+#     orchestrator.py         Gemini agent loop — edit with care
+#   tools/
+#     metrics_tool.py         yfinance metrics — one tool per file
+#     edgar_tool.py           SEC EDGAR fetcher
+#     nia_tool.py             Nozomio Nia document indexer/querier
+#     scraper_tool.py         Web scraper for cultural signals
+#     forum_tool.py           Forum (YC W26) attention data
+#   models/
+#     schemas.py              Pydantic request/response schemas
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# NAMING + LANGUAGE RULES
+# ─────────────────────────────────────────────────────────────────────────────
+# - NEVER use the word "prediction" or "predict" anywhere in UI, comments, or
+#   variable names. We are an EDUCATIONAL signal intelligence platform.
+#   Use: "analysis", "explanation", "signal", "insight", "movement driver".
+# - Scores are 0–100: Cultural Score, Financial Score, Alpha Score.
+# - The directional arrow (↑ up / ↓ down) reflects the explained movement,
+#   not a forecast.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# MERGE CONFLICT PREVENTION
+# ─────────────────────────────────────────────────────────────────────────────
+# - One person/agent owns one file at a time. Coordinate before editing shared
+#   files (App.tsx, orchestrator.py, schemas.py, types/index.ts).
+# - Add new API endpoints in backend/main.py by appending — don't restructure.
+# - Add new tool imports in orchestrator.py in the designated TOOLS SECTION.
+# - Add new TypeScript types to types/index.ts by appending — don't rename
+#   existing types (it breaks other components).
+# - UI changes go in new or existing component files, not in App.tsx directly.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# DEMO HARDCODES (use these for testing and demo day)
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. Nike (NKE) — Q3 2024
+# 2. Nvidia (NVDA) — Q2 2024
+# 3. Tesla (TSLA) — Q4 2023
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# TECH STACK
+# ─────────────────────────────────────────────────────────────────────────────
+# Frontend: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui primitives
+# Backend:  Python 3.11+, FastAPI, Gemini 2.0 Flash (function calling),
+#           yfinance, httpx, beautifulsoup4
+# External: Forum API, Nozomio Nia API, SEC EDGAR (no key), Gemini API
