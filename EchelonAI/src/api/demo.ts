@@ -643,6 +643,12 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
         displayedMetricKeys: DISPLAYED_METRIC_KEYS,
         displayedMetrics,
         displayedCulturalSignals,
+        scores: {
+          financialScore: result.financialScore,
+          culturalScore: result.culturalScore,
+          echelonScore: result.alphaScore,
+        },
+        priceDeltaPercent: result.forumChart?.deltaPrice ?? null,
       }),
     });
 

@@ -27,6 +27,12 @@ interface AlphaSynthesisInput {
     text: string;
     source: string;
   }>;
+  scores?: {
+    financialScore: number;
+    culturalScore: number;
+    echelonScore: number;
+  };
+  priceDeltaPercent?: number;
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -51,37 +57,63 @@ function buildSynthesisPrompt(input: AlphaSynthesisInput) {
     ],
   };
 
-  return `
-You are a financial+cultural signal synthesis analyst writing an Echelon Synthesis.
-Task: write a retrospective analysis in PAST TENSE from ONLY the provided dataset for the completed quarter Q${input.timeframe.quarter} ${input.timeframe.year}.
-Do not invent facts, dates, or numbers.
-Do not give investment advice.
-Do not use any outside knowledge.
-Do not cite anything outside the allowed keys/indices.
-Write everything in PAST TENSE — the quarter has already occurred.
+  const priceContext = typeof input.priceDeltaPercent === "number"
+    ? `The stock ${input.priceDeltaPercent >= 0 ? "rose" : "fell"} ${Math.abs(input.priceDeltaPercent).toFixed(2)}% over the quarter.`
+    : "";
 
-Output must be strict JSON following this shape:
+  const scoreContext = input.scores
+    ? `Echelon scores: Financial ${input.scores.financialScore.toFixed(1)}/100 · Cultural ${input.scores.culturalScore.toFixed(1)}/100 · Overall ${input.scores.echelonScore.toFixed(1)}/100.`
+    : "";
+
+  const sentimentCounts = input.displayedCulturalSignals.reduce(
+    (acc, s) => { acc[s.sentiment] = (acc[s.sentiment] || 0) + 1; return acc; },
+    {} as Record<string, number>
+  );
+  const sentimentSummary = Object.entries(sentimentCounts)
+    .map(([k, v]) => `${v} ${k === "pos" ? "positive" : k === "neg" ? "negative" : "neutral"}`)
+    .join(", ");
+
+  return `
+You are an Echelon analyst writing a retrospective signal synthesis for ${input.companyName} (${input.ticker}) — Q${input.timeframe.quarter} ${input.timeframe.year}.
+${priceContext} ${scoreContext}
+
+Your job: explain, causally and in past tense, how the interplay of financial fundamentals and cultural/media signals drove the stock's narrative and price action during this quarter.
+
+SENTIMENT KEY for DATA.displayedCulturalSignals:
+  "pos"     = market-positive coverage (upgrades, beats, product wins, bullish narrative)
+  "neg"     = market-negative coverage (misses, lawsuits, regulatory risk, bearish narrative)
+  "neutral" = ambiguous or informational coverage with no clear directional signal
+Cultural signal mix this quarter: ${sentimentSummary || "no signals available"}.
+
+Output must be strict JSON matching this exact shape:
 ${JSON.stringify(schema, null, 2)}
 
-Rules:
-1) summary: 5-8 sentences in past tense describing what happened during Q${input.timeframe.quarter} ${input.timeframe.year}. Include causal interpretation and confidence caveats.
-2) reasoning: 6-10 items, most important first.
-3) Each reasoning item MUST include:
-   - insight: concise PAST TENSE statement of what the cited data point showed (max 1 sentence)
-   - whyItMatters: concise implication in past tense (max 2 short sentences)
-4) metricCitations must contain ONLY values from DATA.displayedMetricKeys.
-5) culturalSignalCitations must contain ONLY valid indices from DATA.displayedCulturalSignals.index.
-6) Every reasoning item must cite at least one metric or one cultural signal.
-7) Across all reasoning items, cover ALL metric keys in DATA.displayedMetricKeys at least once.
-8) If DATA.displayedCulturalSignals is non-empty, cover ALL cultural signal indices at least once.
-9) Do not create a reasoning item for any metric whose value is null.
-10) If a metric is null, do not cite it in reasoning; you may mention data limitations in summary only.
-11) Never claim or imply "the company did not report" unless that exact claim exists in DATA.
-12) If DATA.displayedCulturalSignals is empty, keep synthesis financial-only.
-13) Do not mention any metric name not present in DATA.displayedMetricKeys.
-14) Keep wording high-signal, no hype, no generic filler.
-15) Order reasoning items from most important to least important.
-16) Use past tense throughout: "reported", "traded", "showed", "declined", "rose", NOT "is", "has", "remains".
+WRITING RULES — follow every one:
+1)  summary: 6-9 sentences, past tense. Structure it as:
+      - Sentence 1-2: Overall quarter narrative — what happened to the stock and why at a high level.
+      - Sentence 3-4: Most significant cultural signal(s) — what the coverage said, its sentiment, and how it shaped market perception.
+      - Sentence 5-6: Key financial factors — which metrics were strongest or weakest and what they revealed.
+      - Sentence 7-9: How cultural and financial signals interacted causally, plus confidence caveats.
+2)  reasoning: 6-10 items ordered most → least important. Aim for roughly half cultural, half financial.
+3)  For every CULTURAL reasoning item:
+      - insight: state specifically what the signal said, its sentiment, and what narrative it created for investors (past tense, 1 sentence).
+      - whyItMatters: explain the causal chain — how this coverage shifted perception, sentiment, or positioning (2 sentences max).
+4)  For every FINANCIAL reasoning item:
+      - insight: state the metric value and what it revealed about the business (past tense, 1 sentence).
+      - whyItMatters: explain what this implied for valuation, risk, or growth trajectory (2 sentences max).
+5)  metricCitations: only keys from DATA.displayedMetricKeys.
+6)  culturalSignalCitations: only indices from DATA.displayedCulturalSignals[].index.
+7)  Every reasoning item must cite at least one metric OR one signal — never zero citations.
+8)  Cover ALL non-null metric keys across the full reasoning list.
+9)  Cover ALL cultural signal indices at least once if signals exist.
+10) Skip reasoning items for null metrics — mention data gaps in summary only.
+11) Do NOT invent facts, dates, or numbers not present in DATA.
+12) Do NOT use outside knowledge. Only DATA.
+13) Past tense throughout: "reported", "showed", "rose", "fell", "faced", "posted". NOT "is", "has", "remains", "continues".
+14) No hype, no generic filler, no investment advice.
+15) Negative cultural signals are equally important as financial ones — do not downplay them.
+16) If cultural score was low (< 45), explicitly explain which signals drove sentiment down and why.
+17) If cultural score was high (> 65), explain which positive signals reinforced the bullish narrative.
 
 DATA:
 ${JSON.stringify(input, null, 2)}
