@@ -234,9 +234,9 @@ def _classify_sentiment(text: str) -> str:
             base *= 0.6
         score += base
 
-    if score >= 2.5:
+    if score >= 1.5:
         return "green"
-    if score <= -2.0:
+    if score <= -1.5:
         return "red"
     return "yellow"
 
