@@ -1,143 +1,126 @@
 // READ instructions.txt before editing this file.
-// Financial Metrics panel - Yahoo Finance only.
+// Financial Metrics panel driven by financial_agent.py outputs.
 
 import type { FinancialMetrics } from "@/types";
 
 interface Props { metrics: FinancialMetrics; periodLabel: string; error?: string }
 
-function fmt(val: number | null, f: (v: number) => string, fallback = "-") {
-  return val == null ? fallback : f(val);
-}
+type MetricKey = keyof FinancialMetrics;
+type MetricCategory = "valuation" | "profitability" | "growth" | "cashflow" | "balance" | "dividend" | "risk";
 
-function pct(v: number) {
-  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
-
-function compact(v: number) {
-  const abs = Math.abs(v);
-  if (abs >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-  return `${v.toFixed(0)}`;
-}
-
-type MetricTone = "signal" | "valuation" | "cashflow" | "neutral" | "positive" | "negative";
-
-function toneStyle(tone: MetricTone) {
-  if (tone === "positive") {
-    return {
-      border: "#3ddc8440",
-      bg: "rgba(61,220,132,0.10)",
-      chip: "#3ddc84",
-      label: "#7bf0b0",
-      value: "var(--green)",
-    };
-  }
-  if (tone === "negative") {
-    return {
-      border: "#ff4c4c40",
-      bg: "rgba(255,76,76,0.10)",
-      chip: "#ff4c4c",
-      label: "#ff8a8a",
-      value: "var(--red)",
-    };
-  }
-  if (tone === "signal") {
-    return {
-      border: "rgba(245,166,35,0.35)",
-      bg: "rgba(245,166,35,0.08)",
-      chip: "var(--accent)",
-      label: "#ffd08a",
-      value: "var(--text)",
-    };
-  }
-  if (tone === "valuation") {
-    return {
-      border: "rgba(124,110,245,0.35)",
-      bg: "rgba(124,110,245,0.08)",
-      chip: "var(--purple)",
-      label: "#b9b0ff",
-      value: "#d8d3ff",
-    };
-  }
-  if (tone === "cashflow") {
-    return {
-      border: "rgba(61,220,132,0.28)",
-      bg: "rgba(61,220,132,0.06)",
-      chip: "var(--green)",
-      label: "#8de9ba",
-      value: "var(--text)",
-    };
-  }
-  return {
-    border: "var(--border)",
-    bg: "var(--bg)",
-    chip: "var(--text-muted)",
-    label: "var(--text-muted)",
-    value: "var(--text)",
-  };
-}
-
-function MetricCell({ label, value, delta, color, highlight, tone, definition }: {
+type MetricDefinition = {
+  key: MetricKey;
   label: string;
-  value: string;
-  delta?: string;
-  color?: string;
-  highlight?: "green" | "red";
-  tone?: MetricTone;
   definition: string;
-}) {
-  const resolvedTone: MetricTone =
-    highlight === "green"
-      ? "positive"
-      : highlight === "red"
-      ? "negative"
-      : tone ?? "neutral";
-  const t = toneStyle(resolvedTone);
+  category: MetricCategory;
+  format: "percent" | "multiple" | "currency" | "number" | "ratio";
+};
+
+const METRIC_DEFINITIONS: MetricDefinition[] = [
+  { key: "trailingPE", label: "Trailing P/E", definition: "Share price divided by trailing 12-month earnings per share.", category: "valuation", format: "multiple" },
+  { key: "forwardPE", label: "Forward P/E", definition: "Share price divided by expected forward earnings per share.", category: "valuation", format: "multiple" },
+  { key: "pegRatio", label: "PEG Ratio", definition: "P/E adjusted by expected earnings growth; lower can imply better value vs growth.", category: "valuation", format: "ratio" },
+  { key: "enterpriseToEbitda", label: "EV / EBITDA", definition: "Enterprise value divided by EBITDA; compares valuation across capital structures.", category: "valuation", format: "multiple" },
+  { key: "priceToBook", label: "Price / Book", definition: "Market value relative to book value of equity.", category: "valuation", format: "multiple" },
+
+  { key: "returnOnEquity", label: "Return on Equity", definition: "Net income generated per dollar of shareholder equity.", category: "profitability", format: "percent" },
+  { key: "returnOnAssets", label: "Return on Assets", definition: "Net income generated per dollar of total assets.", category: "profitability", format: "percent" },
+  { key: "profitMargins", label: "Profit Margin", definition: "Net income as a share of revenue.", category: "profitability", format: "percent" },
+  { key: "grossMargins", label: "Gross Margin", definition: "Gross profit as a share of revenue.", category: "profitability", format: "percent" },
+  { key: "operatingMargins", label: "Operating Margin", definition: "Operating income as a share of revenue.", category: "profitability", format: "percent" },
+  { key: "ebitdaMargins", label: "EBITDA Margin", definition: "EBITDA as a share of revenue.", category: "profitability", format: "percent" },
+
+  { key: "revenueGrowth", label: "Revenue Growth", definition: "Growth rate of revenue from prior comparable period.", category: "growth", format: "percent" },
+  { key: "earningsGrowth", label: "Earnings Growth", definition: "Growth rate of earnings from prior comparable period.", category: "growth", format: "percent" },
+
+  { key: "freeCashflow", label: "Free Cash Flow", definition: "Operating cash flow minus capital expenditures.", category: "cashflow", format: "currency" },
+  { key: "operatingCashflow", label: "Operating Cash Flow", definition: "Cash generated by core business operations.", category: "cashflow", format: "currency" },
+  { key: "capitalExpenditures", label: "Capital Expenditures", definition: "Cash spent on long-term assets and infrastructure.", category: "cashflow", format: "currency" },
+  { key: "fcf_change", label: "FCF Proxy", definition: "Proxy from operating cash flow minus capex used by the financial agent pipeline.", category: "cashflow", format: "currency" },
+  { key: "totalRevenue", label: "Total Revenue", definition: "Total top-line sales for the selected period snapshot.", category: "cashflow", format: "currency" },
+
+  { key: "marketCap", label: "Market Cap", definition: "Total equity market value of the company.", category: "balance", format: "currency" },
+  { key: "totalCash", label: "Total Cash", definition: "Cash and cash equivalents on the balance sheet.", category: "balance", format: "currency" },
+  { key: "totalDebt", label: "Total Debt", definition: "Short-term and long-term debt obligations.", category: "balance", format: "currency" },
+  { key: "debtToEquity", label: "Debt / Equity", definition: "Leverage ratio showing debt relative to equity.", category: "balance", format: "ratio" },
+  { key: "currentRatio", label: "Current Ratio", definition: "Current assets divided by current liabilities.", category: "balance", format: "ratio" },
+  { key: "quickRatio", label: "Quick Ratio", definition: "Liquid assets divided by current liabilities.", category: "balance", format: "ratio" },
+
+  { key: "dividendRate", label: "Dividend Rate", definition: "Annualized dividend amount per share.", category: "dividend", format: "currency" },
+  { key: "dividendYield", label: "Dividend Yield", definition: "Dividend rate divided by share price.", category: "dividend", format: "percent" },
+  { key: "dividend_change", label: "Dividend Change", definition: "Difference between last and previous dividend payouts.", category: "dividend", format: "currency" },
+  { key: "payoutRatio", label: "Payout Ratio", definition: "Fraction of earnings paid out as dividends.", category: "dividend", format: "percent" },
+
+  { key: "beta", label: "Beta", definition: "Volatility sensitivity versus the broader market.", category: "risk", format: "number" },
+];
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+function compactCurrency(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `$${(v / 1e3).toFixed(2)}K`;
+  return `$${v.toFixed(2)}`;
+}
+
+function formatValue(metric: MetricDefinition, value: number): string {
+  if (metric.format === "multiple") return `${value.toFixed(2)}x`;
+  if (metric.format === "percent") return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+  if (metric.format === "currency") return compactCurrency(value);
+  if (metric.format === "ratio") return value.toFixed(2);
+  return value.toFixed(2);
+}
+
+const NEUTRAL_TONE = { border: "var(--border)", bg: "rgba(255,255,255,0.02)", label: "var(--text-muted)" };
+
+function directionalHighlight(metric: MetricDefinition, value: number): "green" | "red" | undefined {
+  switch (metric.key) {
+    // Profitability — green only if strong, red only if negative
+    case "returnOnEquity":    return value > 0.15 ? "green" : value < 0 ? "red" : undefined;
+    case "returnOnAssets":    return value > 0.05 ? "green" : value < 0 ? "red" : undefined;
+    case "profitMargins":     return value > 0.20 ? "green" : value < 0 ? "red" : undefined;
+    case "grossMargins":      return value > 0.40 ? "green" : value < 0.10 ? "red" : undefined;
+    case "operatingMargins":  return value > 0.15 ? "green" : value < 0 ? "red" : undefined;
+    case "ebitdaMargins":     return value > 0.20 ? "green" : value < 0 ? "red" : undefined;
+    // Growth — green only if strong, red only if clearly declining
+    case "revenueGrowth":     return value > 0.10 ? "green" : value < -0.05 ? "red" : undefined;
+    case "earningsGrowth":    return value > 0.10 ? "green" : value < -0.05 ? "red" : undefined;
+    // Balance — clear thresholds only
+    case "debtToEquity":      return value < 0.5 ? "green" : value > 2.0 ? "red" : undefined;
+    case "currentRatio":      return value >= 2.0 ? "green" : value < 1.0 ? "red" : undefined;
+    case "quickRatio":        return value >= 1.5 ? "green" : value < 0.8 ? "red" : undefined;
+    // Cash flow — positive good, negative bad (material threshold)
+    case "freeCashflow":      return value > 5e8 ? "green" : value < 0 ? "red" : undefined;
+    case "operatingCashflow": return value > 0 ? "green" : "red";
+    // Risk
+    case "beta":              return value < 1.0 ? "green" : value > 2.0 ? "red" : undefined;
+    case "payoutRatio":       return value < 0.6 ? "green" : value > 0.9 ? "red" : undefined;
+    // No directional color — valuation multiples, dividends, and currency totals are context-dependent
+    default:                  return undefined;
+  }
+}
+
+function MetricCell({ metric, value }: { metric: MetricDefinition; value: number }) {
+  const highlight = directionalHighlight(metric, value);
+
+  const borderColor = highlight === "green" ? "rgba(61,220,132,0.4)" : highlight === "red" ? "rgba(255,76,76,0.4)" : NEUTRAL_TONE.border;
+  const bgColor = highlight === "green" ? "rgba(61,220,132,0.07)" : highlight === "red" ? "rgba(255,76,76,0.07)" : NEUTRAL_TONE.bg;
+  const valueColor = highlight === "green" ? "var(--green)" : highlight === "red" ? "var(--red)" : "var(--text)";
+  const labelColor = highlight === "green" ? "#7ecfa8" : highlight === "red" ? "#d88080" : NEUTRAL_TONE.label;
 
   return (
-    <div
-      style={{
-        padding: 14,
-        border: `1px solid ${t.border}`,
-        background: t.bg,
-        position: "relative",
-        borderLeft: `3px solid ${t.chip}`,
-      }}
-    >
-      {highlight && (
-        <span
-          style={{
-            position: "absolute",
-            top: 8,
-            right: 10,
-            fontSize: 8,
-            letterSpacing: "0.08em",
-            color: highlight === "green" ? "#3ddc8466" : "#ff4c4c66",
-            textTransform: "uppercase",
-          }}
-        >
-          Surprise Signal
-        </span>
-      )}
-
-      <p
-        style={{
-          fontSize: 9,
-          letterSpacing: "0.2em",
-          color: t.label,
-          textTransform: "uppercase",
-          marginBottom: 8,
-        }}
-      >
-        {label}
+    <div style={{ padding: 14, border: `1px solid ${borderColor}`, background: bgColor, position: "relative" }}>
+      <p style={{ fontSize: 9, letterSpacing: "0.2em", color: labelColor, textTransform: "uppercase", marginBottom: 8 }}>
+        {metric.label}
       </p>
 
-      <p className="font-bebas" style={{ fontSize: 22, letterSpacing: "0.04em", color: color ?? t.value }}>
-        {value}
+      <p className="font-bebas" style={{ fontSize: 22, letterSpacing: "0.04em", color: valueColor }}>
+        {formatValue(metric, value)}
       </p>
-
-      {delta && <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{delta}</p>}
 
       <details style={{ marginTop: 8 }}>
         <summary
@@ -152,7 +135,7 @@ function MetricCell({ label, value, delta, color, highlight, tone, definition }:
         >
           Definition
         </summary>
-        <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 6, lineHeight: 1.6 }}>{definition}</p>
+        <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 6, lineHeight: 1.6 }}>{metric.definition}</p>
       </details>
     </div>
   );
@@ -162,7 +145,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
   if (error) {
     return (
       <div className="panel-box fade-up fade-up-3">
-        <div className="panel-label">Financial Metrics (Yahoo) - {periodLabel}</div>
+        <div className="panel-label">Financial Metrics (Agent) - {periodLabel}</div>
         <div
           style={{
             padding: 14,
@@ -179,153 +162,37 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
     );
   }
 
-  const epsC =
-    metrics.epsSurprisePercent == null ? "var(--text)" : metrics.epsSurprisePercent > 0 ? "var(--green)" : "var(--red)";
-  const revC =
-    metrics.revenueSurprisePercent == null
-      ? "var(--text)"
-      : metrics.revenueSurprisePercent > 0
-      ? "var(--green)"
-      : "var(--red)";
-  const epsH =
-    metrics.epsSurprisePercent != null
-      ? ((metrics.epsSurprisePercent > 0 ? "green" : "red") as "green" | "red")
-      : undefined;
-  const revH =
-    metrics.revenueSurprisePercent != null
-      ? ((metrics.revenueSurprisePercent > 0 ? "green" : "red") as "green" | "red")
-      : undefined;
+  const availableMetrics = METRIC_DEFINITIONS
+    .map((def) => ({ def, value: metrics[def.key] }))
+    .filter((row): row is { def: MetricDefinition; value: number } => isFiniteNumber(row.value));
+
+  if (availableMetrics.length === 0) {
+    return (
+      <div className="panel-box fade-up fade-up-3">
+        <div className="panel-label">Financial Metrics (Agent) - {periodLabel}</div>
+        <div
+          style={{
+            padding: 14,
+            border: "1px solid var(--border)",
+            background: "var(--bg)",
+            color: "var(--text-muted)",
+            fontSize: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          No financial metrics were returned by the financial agent for this ticker and period.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="panel-box fade-up fade-up-3">
-      <div className="panel-label">Financial Metrics (Yahoo) - {periodLabel}</div>
-
+      <div className="panel-label">Financial Metrics (Agent) - {periodLabel}</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <MetricCell
-          label="EPS Surprise"
-          value={fmt(metrics.epsSurprisePercent, pct)}
-          delta={
-            metrics.epsSurprisePercent != null
-              ? metrics.epsSurprisePercent > 0
-                ? "Beat estimate"
-                : "Missed estimate"
-              : "Not available"
-          }
-          color={epsC}
-          highlight={epsH}
-          tone="signal"
-          definition="How far reported EPS differed from analyst consensus for the quarter."
-        />
-
-        <MetricCell
-          label="Revenue Surprise"
-          value={fmt(metrics.revenueSurprisePercent, pct)}
-          delta={
-            metrics.revenueSurprisePercent != null
-              ? metrics.revenueSurprisePercent > 0
-                ? "Beat estimate"
-                : "Missed estimate"
-              : "Not available"
-          }
-          color={revC}
-          highlight={revH}
-          tone="signal"
-          definition="How far reported revenue differed from analyst consensus for the quarter."
-        />
-
-        <MetricCell
-          label="Dividend Change QoQ"
-          value={fmt(metrics.dividendChangePercent, pct, "N/A")}
-          delta="Current quarter vs prior quarter"
-          color={
-            metrics.dividendChangePercent == null
-              ? "var(--text-muted)"
-              : metrics.dividendChangePercent > 0
-              ? "var(--green)"
-              : "var(--text)"
-          }
-          highlight={
-            metrics.dividendChangePercent == null
-              ? undefined
-              : metrics.dividendChangePercent > 0
-              ? "green"
-              : metrics.dividendChangePercent < 0
-              ? "red"
-              : undefined
-          }
-          tone="cashflow"
-          definition="Quarter-over-quarter percent change in dividend paid per share."
-        />
-
-        <MetricCell
-          label="FCF Change QoQ"
-          value={fmt(metrics.fcfChangeQoQ, pct)}
-          delta="Free cash flow trend"
-          color={
-            metrics.fcfChangeQoQ == null
-              ? "var(--text)"
-              : metrics.fcfChangeQoQ >= 0
-              ? "var(--green)"
-              : "var(--red)"
-          }
-          highlight={
-            metrics.fcfChangeQoQ == null
-              ? undefined
-              : metrics.fcfChangeQoQ >= 0
-              ? "green"
-              : "red"
-          }
-          tone="cashflow"
-          definition="Quarter-over-quarter change in free cash flow (operating cash minus capex)."
-        />
-
-        <MetricCell
-          label="P/E Ratio"
-          value={fmt(metrics.peRatio, (v) => `${v.toFixed(2)}x`)}
-          delta="Trailing or forward (Yahoo)"
-          tone="valuation"
-          definition="Price per share divided by earnings per share; a common valuation multiple."
-        />
-
-        <MetricCell
-          label="PEG Ratio"
-          value={fmt(metrics.pegRatio, (v) => v.toFixed(2))}
-          delta="Price/Earnings-to-Growth"
-          tone="valuation"
-          definition="P/E ratio adjusted by earnings growth rate; lower can imply better value relative to growth."
-        />
-
-        <MetricCell
-          label="Price / Book"
-          value={fmt(metrics.priceToBook, (v) => `${v.toFixed(2)}x`)}
-          delta="Valuation multiple"
-          tone="valuation"
-          definition="Market value compared with book value of equity on the balance sheet."
-        />
-
-        <MetricCell
-          label="Price / Sales (TTM)"
-          value={fmt(metrics.priceToSalesTtm, (v) => `${v.toFixed(2)}x`)}
-          delta="Trailing 12-month sales"
-          tone="valuation"
-          definition="Market value relative to trailing twelve-month revenue."
-        />
-
-        <MetricCell
-          label="Enterprise Value"
-          value={fmt(metrics.enterpriseValue, compact)}
-          delta="Total firm value"
-          tone="valuation"
-          definition="Total takeover value: market cap plus debt minus cash."
-        />
-
-        <MetricCell
-          label="EV / EBITDA"
-          value={fmt(metrics.enterpriseToEbitda, (v) => `${v.toFixed(2)}x`)}
-          delta="Enterprise multiple"
-          tone="valuation"
-          definition="Enterprise value divided by EBITDA; compares valuation across companies with different capital structures."
-        />
+        {availableMetrics.map((row) => (
+          <MetricCell key={row.def.key} metric={row.def} value={row.value} />
+        ))}
       </div>
     </div>
   );

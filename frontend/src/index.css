@@ -48,6 +48,23 @@
     z-index: 9999;
   }
 
+  /* Moving horizontal bar background — subtle coder effect */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: -60px 0 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 56px,
+      rgba(61, 220, 132, 0.022) 56px,
+      rgba(61, 220, 132, 0.022) 58px
+    );
+    animation: barScroll 10s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-track { background: var(--surface); }
   ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 999px; }
@@ -107,6 +124,8 @@
     border-radius: 6px;
     padding: 24px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    position: relative;
+    z-index: 1;
   }
 
   .panel-box p,
@@ -172,6 +191,11 @@
   @keyframes statusPulse {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.3; }
+  }
+
+  @keyframes barScroll {
+    from { transform: translateY(0); }
+    to   { transform: translateY(58px); }
   }
 
   @media (max-width: 980px) {

@@ -174,27 +174,71 @@ interface YahooResolveResponse {
   companyName?: string;
 }
 
-interface YahooMetricsResponse {
+interface AgentDataSignal {
+  date: string;
+  sentiment: "pos" | "neg" | "neutral";
+  text: string;
+  source: string;
+  title?: string;
+  url?: string;
+  content?: string;
+  relevanceScore?: number;
+}
+
+interface AgentDataResponse {
   ticker: string;
+  companyName: string;
   timeframe: { quarter: number; year: number };
-  metrics: FinancialMetrics;
+  financialMetrics: FinancialMetrics;
+  culturalSignals: AgentDataSignal[];
+  scores?: {
+    financialScore?: number;
+    culturalScore?: number;
+    forumMomentumScore?: number;
+    alphaScore?: number;
+  };
   priceChart?: AnalysisResult["forumChart"] | null;
+  priceDeltaPercent?: number;
+  sources?: AnalysisResult["sources"];
+  errors?: {
+    financial?: string;
+    cultural?: string;
+    priceChart?: string;
+  };
 }
 
 type DisplayedMetricKey = keyof FinancialMetrics;
 
 const DISPLAYED_METRIC_KEYS: DisplayedMetricKey[] = [
-  "priceChangePercent",
-  "peRatio",
-  "epsSurprisePercent",
-  "revenueSurprisePercent",
-  "dividendChangePercent",
-  "fcfChangeQoQ",
+  "trailingPE",
+  "forwardPE",
   "pegRatio",
-  "priceToBook",
-  "priceToSalesTtm",
-  "enterpriseValue",
   "enterpriseToEbitda",
+  "returnOnEquity",
+  "debtToEquity",
+  "priceToBook",
+  "currentRatio",
+  "quickRatio",
+  "marketCap",
+  "totalCash",
+  "totalDebt",
+  "profitMargins",
+  "grossMargins",
+  "operatingMargins",
+  "ebitdaMargins",
+  "revenueGrowth",
+  "earningsGrowth",
+  "returnOnAssets",
+  "payoutRatio",
+  "beta",
+  "freeCashflow",
+  "operatingCashflow",
+  "capitalExpenditures",
+  "fcf_change",
+  "totalRevenue",
+  "dividendRate",
+  "dividendYield",
+  "dividend_change",
 ];
 
 const METRIC_LABEL: Record<DisplayedMetricKey, string> = {
@@ -204,8 +248,34 @@ const METRIC_LABEL: Record<DisplayedMetricKey, string> = {
   revenueSurprisePercent: "Revenue Surprise %",
   dividendChangePercent: "Dividend Change %",
   fcfChangeQoQ: "FCF Change QoQ %",
+  trailingPE: "Trailing P/E",
+  forwardPE: "Forward P/E",
   pegRatio: "PEG Ratio",
+  returnOnEquity: "Return on Equity",
+  debtToEquity: "Debt/Equity",
   priceToBook: "Price/Book",
+  currentRatio: "Current Ratio",
+  quickRatio: "Quick Ratio",
+  marketCap: "Market Cap",
+  totalCash: "Total Cash",
+  totalDebt: "Total Debt",
+  profitMargins: "Profit Margins",
+  grossMargins: "Gross Margins",
+  operatingMargins: "Operating Margins",
+  ebitdaMargins: "EBITDA Margins",
+  revenueGrowth: "Revenue Growth",
+  earningsGrowth: "Earnings Growth",
+  returnOnAssets: "Return on Assets",
+  payoutRatio: "Payout Ratio",
+  beta: "Beta",
+  freeCashflow: "Free Cash Flow",
+  operatingCashflow: "Operating Cash Flow",
+  capitalExpenditures: "Capital Expenditures",
+  fcf_change: "FCF Proxy",
+  totalRevenue: "Total Revenue",
+  dividendRate: "Dividend Rate",
+  dividendYield: "Dividend Yield",
+  dividend_change: "Dividend Change",
   priceToSalesTtm: "Price/Sales TTM",
   enterpriseValue: "Enterprise Value",
   enterpriseToEbitda: "EV/EBITDA",
@@ -228,19 +298,7 @@ function quarterLabel(timeframe: TimeFrame): string {
 }
 
 function emptyMetrics(): FinancialMetrics {
-  return {
-    priceChangePercent: 0,
-    peRatio: null,
-    epsSurprisePercent: null,
-    revenueSurprisePercent: null,
-    dividendChangePercent: null,
-    fcfChangeQoQ: null,
-    pegRatio: null,
-    priceToBook: null,
-    priceToSalesTtm: null,
-    enterpriseValue: null,
-    enterpriseToEbitda: null,
-  };
+  return {};
 }
 
 function buildUnavailableForumChart(timeframe: TimeFrame, deltaPrice: number): AnalysisResult["forumChart"] {
@@ -415,10 +473,6 @@ function buildGenericBaseResult(ticker: string, companyName: string, timeframe: 
   };
 }
 
-function fmtPct(v: number): string {
-  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
-
 function fmtCompact(v: number): string {
   const abs = Math.abs(v);
   if (abs >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
@@ -433,76 +487,21 @@ function buildFinancialOnlySynthesis(
   metrics: FinancialMetrics
 ): { summary: string; reasoning: ReasoningPoint[] } {
   const tfLabel = quarterLabel(timeframe);
-  const directionWord =
-    metrics.priceChangePercent > 1 ? "positive" : metrics.priceChangePercent < -1 ? "negative" : "mixed";
-
+  const availableKeys = DISPLAYED_METRIC_KEYS.filter((k) => metrics[k] != null);
   const summaryParts: string[] = [
-    `${companyName} showed a ${directionWord} setup in ${tfLabel} based on available Yahoo Finance metrics.`,
-    `Price moved ${fmtPct(metrics.priceChangePercent)} for the selected period.`,
-    "Interpretation is limited to metrics available in the current data pipeline for this period.",
+    `${companyName} financial agent output for ${tfLabel} is based strictly on fetched financial and cultural datasets.`,
+    availableKeys.length > 0
+      ? `The pipeline returned ${availableKeys.length} usable financial metrics for this period.`
+      : "No usable financial metrics were returned for this period.",
   ];
 
-  if (metrics.epsSurprisePercent != null) {
-    summaryParts.push(
-      `EPS surprise was ${fmtPct(metrics.epsSurprisePercent)} (${metrics.epsSurprisePercent >= 0 ? "beat" : "miss"}).`
-    );
-  }
-  if (metrics.revenueSurprisePercent != null) {
-    summaryParts.push(
-      `Revenue surprise was ${fmtPct(metrics.revenueSurprisePercent)} (${metrics.revenueSurprisePercent >= 0 ? "beat" : "miss"}).`
-    );
-  }
-
-  const reasoning: ReasoningPoint[] = [];
-  reasoning.push({
+  const reasoning: ReasoningPoint[] = availableKeys.slice(0, 6).map((key) => ({
     category: "financial",
-    text: `Price change for the selected quarter/year is ${fmtPct(metrics.priceChangePercent)}. Why it matters: this anchors direction and indicates whether other signals are being confirmed or contradicted by market movement.`,
+    text: `${METRIC_LABEL[key]} is ${metricValueText(key, metrics)}. Why it matters: ${fallbackWhyItMatters(key)}`,
     sources: [],
-  });
+  }));
 
-  if (metrics.epsSurprisePercent != null) {
-    reasoning.push({
-      category: "financial",
-      text: `EPS surprise is ${fmtPct(metrics.epsSurprisePercent)} (${metrics.epsSurprisePercent >= 0 ? "earnings beat estimates" : "earnings missed estimates"}). Why it matters: surprise magnitude helps explain whether expectations were reset upward or downward.`,
-      sources: [],
-    });
-  }
-
-  if (metrics.revenueSurprisePercent != null) {
-    reasoning.push({
-      category: "financial",
-      text: `Revenue surprise is ${fmtPct(metrics.revenueSurprisePercent)} (${metrics.revenueSurprisePercent >= 0 ? "revenue beat estimates" : "revenue missed estimates"}). Why it matters: revenue surprise informs whether demand strength supports the current narrative.`,
-      sources: [],
-    });
-  }
-
-  if (metrics.fcfChangeQoQ != null) {
-    reasoning.push({
-      category: "financial",
-      text: `Free cash flow changed ${fmtPct(metrics.fcfChangeQoQ)} quarter-over-quarter. Why it matters: cash-flow direction helps validate earnings quality and balance-sheet flexibility.`,
-      sources: [],
-    });
-  }
-
-  const valuationBits: string[] = [];
-  if (metrics.peRatio != null) valuationBits.push(`P/E ${metrics.peRatio.toFixed(2)}x`);
-  if (metrics.pegRatio != null) valuationBits.push(`PEG ${metrics.pegRatio.toFixed(2)}`);
-  if (metrics.priceToBook != null) valuationBits.push(`P/B ${metrics.priceToBook.toFixed(2)}x`);
-  if (metrics.priceToSalesTtm != null) valuationBits.push(`P/S ${metrics.priceToSalesTtm.toFixed(2)}x`);
-  if (metrics.enterpriseToEbitda != null) valuationBits.push(`EV/EBITDA ${metrics.enterpriseToEbitda.toFixed(2)}x`);
-
-  if (valuationBits.length > 0) {
-    reasoning.push({
-      category: "financial",
-      text: `Valuation snapshot: ${valuationBits.join(" · ")}. Why it matters: valuation multiples frame how much optimism or pessimism is already reflected in price.`,
-      sources: [],
-    });
-  }
-
-  return {
-    summary: summaryParts.join(" "),
-    reasoning: reasoning.slice(0, 4),
-  };
+  return { summary: summaryParts.join(" "), reasoning };
 }
 
 function isMetricKey(value: string): value is DisplayedMetricKey {
@@ -512,26 +511,76 @@ function isMetricKey(value: string): value is DisplayedMetricKey {
 function metricValueText(key: DisplayedMetricKey, metrics: FinancialMetrics): string {
   const value = metrics[key];
   if (value == null) return "unavailable in current pipeline";
-  if (key === "enterpriseValue") return fmtCompact(value);
-  if (key === "priceChangePercent" || key === "epsSurprisePercent" || key === "revenueSurprisePercent" || key === "dividendChangePercent" || key === "fcfChangeQoQ") {
-    return fmtPct(value);
-  }
-  if (key === "peRatio" || key === "priceToBook" || key === "priceToSalesTtm" || key === "enterpriseToEbitda") return `${value.toFixed(2)}x`;
+  const currencyKeys: DisplayedMetricKey[] = [
+    "marketCap",
+    "totalCash",
+    "totalDebt",
+    "freeCashflow",
+    "operatingCashflow",
+    "capitalExpenditures",
+    "fcf_change",
+    "totalRevenue",
+    "dividendRate",
+    "enterpriseValue",
+  ];
+  const percentKeys: DisplayedMetricKey[] = [
+    "returnOnEquity",
+    "returnOnAssets",
+    "profitMargins",
+    "grossMargins",
+    "operatingMargins",
+    "ebitdaMargins",
+    "revenueGrowth",
+    "earningsGrowth",
+    "payoutRatio",
+    "dividendYield",
+    "priceChangePercent",
+    "epsSurprisePercent",
+    "revenueSurprisePercent",
+    "dividendChangePercent",
+    "fcfChangeQoQ",
+  ];
+  const multipleKeys: DisplayedMetricKey[] = [
+    "trailingPE",
+    "forwardPE",
+    "peRatio",
+    "priceToBook",
+    "priceToSalesTtm",
+    "enterpriseToEbitda",
+  ];
+
+  if (currencyKeys.includes(key)) return fmtCompact(value);
+  if (percentKeys.includes(key)) return `${(value * 100).toFixed(2)}%`;
+  if (multipleKeys.includes(key)) return `${value.toFixed(2)}x`;
   return value.toFixed(2);
 }
 
 function fallbackWhyItMatters(key: DisplayedMetricKey): string {
-  if (key === "priceChangePercent") return "This anchors short-horizon direction and helps confirm whether the rest of the evidence aligns with observed market behavior.";
-  if (key === "epsSurprisePercent") return "Earnings surprise changes near-term expectations and can influence how investors reprice future profitability.";
-  if (key === "revenueSurprisePercent") return "Revenue surprise is a direct signal of demand strength versus consensus assumptions.";
-  if (key === "dividendChangePercent") return "Dividend adjustments can indicate management confidence in recurring cash generation and capital allocation priorities.";
-  if (key === "fcfChangeQoQ") return "Free cash flow trend supports or weakens the quality of the earnings story by showing realized cash generation.";
-  if (key === "peRatio") return "P/E contextualizes how expensive or cheap earnings are being priced relative to current profitability.";
-  if (key === "pegRatio") return "PEG links valuation to expected growth, helping distinguish justified premium from pure multiple expansion.";
-  if (key === "priceToBook") return "Price/Book helps assess whether valuation is stretched relative to the accounting asset base.";
-  if (key === "priceToSalesTtm") return "Price/Sales indicates how aggressively top-line revenue is currently being valued by the market.";
-  if (key === "enterpriseValue") return "Enterprise value captures total firm value and improves comparability beyond equity market cap alone.";
-  return "EV/EBITDA frames valuation versus operating cash earnings and helps benchmark capital-structure-adjusted expensiveness.";
+  if (key === "trailingPE" || key === "forwardPE" || key === "pegRatio" || key === "enterpriseToEbitda" || key === "priceToBook") {
+    return "This valuation metric helps contextualize whether expectations embedded in price appear conservative, fair, or stretched.";
+  }
+  if (key === "returnOnEquity" || key === "returnOnAssets" || key === "profitMargins" || key === "grossMargins" || key === "operatingMargins" || key === "ebitdaMargins") {
+    return "Profitability metrics show how efficiently revenue and capital are being converted into earnings quality.";
+  }
+  if (key === "revenueGrowth" || key === "earningsGrowth") {
+    return "Growth metrics indicate whether business momentum is expanding or decelerating over time.";
+  }
+  if (key === "debtToEquity" || key === "currentRatio" || key === "quickRatio" || key === "totalDebt" || key === "totalCash") {
+    return "Balance-sheet metrics frame financial resilience, refinancing risk, and short-term liquidity flexibility.";
+  }
+  if (key === "freeCashflow" || key === "operatingCashflow" || key === "capitalExpenditures" || key === "fcf_change" || key === "totalRevenue") {
+    return "Cash-flow and revenue metrics help validate operating durability and reinvestment capacity.";
+  }
+  if (key === "dividendRate" || key === "dividendYield" || key === "dividend_change" || key === "payoutRatio") {
+    return "Dividend metrics indicate how management balances shareholder returns and internal capital needs.";
+  }
+  if (key === "beta") {
+    return "Beta provides a quick view of market-sensitivity and relative volatility risk.";
+  }
+  if (key === "marketCap" || key === "enterpriseValue") {
+    return "Scale metrics help contextualize valuation, risk profile, and peer comparability.";
+  }
+  return "This metric contributes additional context to the current financial setup.";
 }
 
 function isUnavailableNarrative(text: string): boolean {
@@ -572,7 +621,7 @@ function enrichSummary(summary: string, result: AnalysisResult): string {
 async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmSynthesisResponse | null; error: string | null }> {
   try {
     const displayedMetrics = DISPLAYED_METRIC_KEYS.reduce<Record<string, number | null>>((acc, key) => {
-      acc[key] = result.metrics[key];
+      acc[key] = result.metrics[key] ?? null;
       return acc;
     }, {});
 
@@ -722,45 +771,74 @@ async function buildLiveResultFromBase(
   try {
     const params = new URLSearchParams({
       ticker: base.ticker,
+      company: base.companyName,
       quarter: String(timeframe.quarter),
       year: String(timeframe.year),
     });
-    const res = await fetch(`/yahoo-metrics?${params.toString()}`);
+    const res = await fetch(`/agent-data?${params.toString()}`);
     if (!res.ok) {
-      const detail = await extractErrorDetail(res, `Yahoo metrics request failed (${res.status})`);
-      return makeErrorResult(base, timeframe, `Financial fetch error: ${detail}`);
+      const detail = await extractErrorDetail(res, `Agent data request failed (${res.status})`);
+      return makeErrorResult(base, timeframe, `Agent fetch error: ${detail}`);
     }
-    const payload = (await res.json()) as YahooMetricsResponse;
-    if (!payload?.metrics) {
-      return makeErrorResult(base, timeframe, "Financial fetch error: invalid Yahoo metrics payload");
+    const payload = (await res.json()) as AgentDataResponse;
+    if (!payload?.financialMetrics) {
+      return makeErrorResult(base, timeframe, "Agent fetch error: invalid response payload");
     }
 
+    const deltaPriceFallback =
+      typeof payload.priceDeltaPercent === "number" && Number.isFinite(payload.priceDeltaPercent)
+        ? payload.priceDeltaPercent
+        : 0;
     const liveDirection: AnalysisResult["direction"] =
-      payload.metrics.priceChangePercent > 1
+      deltaPriceFallback > 1
         ? "up"
-        : payload.metrics.priceChangePercent < -1
+        : deltaPriceFallback < -1
           ? "down"
           : "flat";
-    const livePriceChart = sanitizePriceChart(payload.priceChart, timeframe, payload.metrics.priceChangePercent);
+    const livePriceChart = sanitizePriceChart(payload.priceChart, timeframe, deltaPriceFallback);
+    const mappedSignals = Array.isArray(payload.culturalSignals)
+      ? payload.culturalSignals.map((signal) => {
+          const sentiment: "pos" | "neg" | "neutral" =
+            signal.sentiment === "pos" || signal.sentiment === "neg"
+              ? signal.sentiment
+              : "neutral";
+          return {
+            date: signal.date || "",
+            sentiment,
+            text: signal.text || signal.title || "Signal unavailable",
+            source: signal.source || "Web",
+          };
+        })
+      : [];
 
     const resultWithLiveMetrics: AnalysisResult = {
       ...base,
+      ticker: payload.ticker || base.ticker,
+      companyName: payload.companyName || base.companyName,
       timeframe,
       direction: liveDirection,
-      alphaScore: 0,
-      culturalScore: 0,
-      financialScore: 0,
-      forumMomentumScore: 0,
-      metrics: payload.metrics,
-      culturalSignals: [],
-      forumChart: livePriceChart ?? buildUnavailableForumChart(timeframe, payload.metrics.priceChangePercent),
-      ...buildFinancialOnlySynthesis(base.companyName, timeframe, payload.metrics),
-      sources: [],
+      alphaScore: payload.scores?.alphaScore ?? 0,
+      culturalScore: payload.scores?.culturalScore ?? 0,
+      financialScore: payload.scores?.financialScore ?? 0,
+      forumMomentumScore: payload.scores?.forumMomentumScore ?? 0,
+      metrics: payload.financialMetrics,
+      culturalSignals: mappedSignals,
+      forumChart: livePriceChart ?? buildUnavailableForumChart(timeframe, deltaPriceFallback),
+      ...buildFinancialOnlySynthesis(payload.companyName || base.companyName, timeframe, payload.financialMetrics),
+      sources:
+        payload.sources && payload.sources.length > 0
+          ? payload.sources
+          : mappedSignals.slice(0, 8).map((s, idx) => ({
+                title: `Signal ${idx + 1}: ${s.text.slice(0, 72)}`,
+                url: "#",
+                date: s.date,
+                type: "web" as const,
+              })),
       dataErrors: {
-        scorecard: "Score block is hidden because alpha/cultural/forum scoring is not yet computed from live feeds.",
-        forumChart: livePriceChart ? undefined : "Stock price chart is unavailable for this ticker/quarter from Yahoo Finance.",
-        cultural: "Cultural signals hidden: live cultural feed is not connected.",
-        sources: "Sources panel hidden: no live source ingestion is connected.",
+        financial: payload.errors?.financial,
+        cultural: payload.errors?.cultural,
+        forumChart: payload.errors?.priceChart ?? (livePriceChart ? undefined : "Stock price chart is unavailable for this ticker/quarter."),
+        sources: payload.sources && payload.sources.length > 0 ? undefined : "No source links returned by the search agent.",
       },
     };
 

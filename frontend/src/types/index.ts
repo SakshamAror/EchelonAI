@@ -18,18 +18,46 @@ export interface AnalysisRequest {
 }
 
 export interface FinancialMetrics {
-  priceChangePercent: number;
-  peRatio: number | null;
-  epsSurprisePercent: number | null;      // e.g. +4.1 = beat by 4.1%
-  revenueSurprisePercent: number | null;  // e.g. -2.8 = missed by 2.8%
-  dividendChangePercent: number | null;   // null = no dividend
-  fcfChangeQoQ: number | null;            // free cash flow % change
-  // Valuation metrics (Yahoo Finance)
-  pegRatio: number | null;
-  priceToBook: number | null;
-  priceToSalesTtm: number | null;
-  enterpriseValue: number | null;
-  enterpriseToEbitda: number | null;
+  // Legacy keys (kept optional for compatibility with old fixtures)
+  priceChangePercent?: number | null;
+  peRatio?: number | null;
+  epsSurprisePercent?: number | null;
+  revenueSurprisePercent?: number | null;
+  dividendChangePercent?: number | null;
+  fcfChangeQoQ?: number | null;
+  priceToSalesTtm?: number | null;
+  enterpriseValue?: number | null;
+
+  // Agent-derived keys
+  trailingPE?: number | null;
+  forwardPE?: number | null;
+  pegRatio?: number | null;
+  enterpriseToEbitda?: number | null;
+  returnOnEquity?: number | null;
+  debtToEquity?: number | null;
+  priceToBook?: number | null;
+  currentRatio?: number | null;
+  quickRatio?: number | null;
+  marketCap?: number | null;
+  totalCash?: number | null;
+  totalDebt?: number | null;
+  profitMargins?: number | null;
+  grossMargins?: number | null;
+  operatingMargins?: number | null;
+  ebitdaMargins?: number | null;
+  revenueGrowth?: number | null;
+  earningsGrowth?: number | null;
+  returnOnAssets?: number | null;
+  payoutRatio?: number | null;
+  beta?: number | null;
+  freeCashflow?: number | null;
+  operatingCashflow?: number | null;
+  capitalExpenditures?: number | null;
+  fcf_change?: number | null;
+  totalRevenue?: number | null;
+  dividendRate?: number | null;
+  dividendYield?: number | null;
+  dividend_change?: number | null;
 }
 
 export interface CulturalSignal {

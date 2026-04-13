@@ -2,6 +2,7 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
@@ -10,6 +11,8 @@ const execFileAsync = promisify(execFile);
 const yahooScriptPath = path.resolve(__dirname, "./scripts/fetch-yfinance-metrics.mjs");
 const yahooResolveScriptPath = path.resolve(__dirname, "./scripts/resolve-yahoo-ticker.mjs");
 const yahooSearchScriptPath = path.resolve(__dirname, "./scripts/search-yahoo-equities.mjs");
+const agentDataScriptPath = path.resolve(__dirname, "./scripts/fetch-agent-data.py");
+const defaultAgentPythonPath = path.resolve(__dirname, "./.venv/bin/python");
 
 interface AlphaSynthesisInput {
   ticker: string;
@@ -49,22 +52,23 @@ function buildSynthesisPrompt(input: AlphaSynthesisInput) {
   };
 
   return `
-You are a financial+cultural signal synthesis analyst.
-Task: write Alpha Synthesis from ONLY the provided dataset.
+You are a financial+cultural signal synthesis analyst writing an Echelon Synthesis.
+Task: write a retrospective analysis in PAST TENSE from ONLY the provided dataset for the completed quarter Q${input.timeframe.quarter} ${input.timeframe.year}.
 Do not invent facts, dates, or numbers.
 Do not give investment advice.
 Do not use any outside knowledge.
 Do not cite anything outside the allowed keys/indices.
+Write everything in PAST TENSE — the quarter has already occurred.
 
 Output must be strict JSON following this shape:
 ${JSON.stringify(schema, null, 2)}
 
 Rules:
-1) summary: 5-8 sentences with clear causal interpretation and confidence caveats.
+1) summary: 5-8 sentences in past tense describing what happened during Q${input.timeframe.quarter} ${input.timeframe.year}. Include causal interpretation and confidence caveats.
 2) reasoning: 6-10 items, most important first.
 3) Each reasoning item MUST include:
-   - insight: concise statement of what the cited data point shows (max 1 sentence)
-   - whyItMatters: concise implication (max 2 short sentences)
+   - insight: concise PAST TENSE statement of what the cited data point showed (max 1 sentence)
+   - whyItMatters: concise implication in past tense (max 2 short sentences)
 4) metricCitations must contain ONLY values from DATA.displayedMetricKeys.
 5) culturalSignalCitations must contain ONLY valid indices from DATA.displayedCulturalSignals.index.
 6) Every reasoning item must cite at least one metric or one cultural signal.
@@ -77,6 +81,7 @@ Rules:
 13) Do not mention any metric name not present in DATA.displayedMetricKeys.
 14) Keep wording high-signal, no hype, no generic filler.
 15) Order reasoning items from most important to least important.
+16) Use past tense throughout: "reported", "traded", "showed", "declined", "rose", NOT "is", "has", "remains".
 
 DATA:
 ${JSON.stringify(input, null, 2)}
@@ -129,10 +134,59 @@ async function callGroqSynthesis(input: AlphaSynthesisInput, apiKey: string, mod
   return parseJsonContent(text);
 }
 
-function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string) {
+function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string, agentPythonBin: string) {
   return {
     name: "yahoo-metrics-dev-endpoint",
     configureServer(server: import("vite").ViteDevServer) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/agent-data")) return next();
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        const url = new URL(req.url, "http://localhost");
+        const ticker = (url.searchParams.get("ticker") ?? "").toUpperCase();
+        const company = (url.searchParams.get("company") ?? "").trim();
+        const quarter = Number(url.searchParams.get("quarter"));
+        const year = Number(url.searchParams.get("year"));
+
+        if (!ticker || !company || !Number.isInteger(quarter) || !Number.isInteger(year)) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Missing or invalid ticker/company/quarter/year query params" }));
+          return;
+        }
+
+        try {
+          const { stdout } = await execFileAsync(
+            agentPythonBin,
+            [
+              agentDataScriptPath,
+              "--ticker", ticker,
+              "--company", company,
+              "--quarter", String(quarter),
+              "--year", String(year),
+            ],
+            {
+              cwd: __dirname,
+              maxBuffer: 4 * 1024 * 1024,
+            }
+          );
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(stdout);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Failed to fetch agent data";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/yahoo-search")) return next();
         if (req.method !== "GET") {
@@ -288,9 +342,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const groqApiKey = env.GROQ_API_KEY || process.env.GROQ_API_KEY || "";
   const groqModel = env.GROQ_MODEL || process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const agentPythonBin =
+    env.AGENT_PYTHON_BIN ||
+    process.env.AGENT_PYTHON_BIN ||
+    (existsSync(defaultAgentPythonPath) ? defaultAgentPythonPath : "python3");
 
   return {
-    plugins: [react(), yahooMetricsDevPlugin(groqApiKey, groqModel)],
+    plugins: [react(), yahooMetricsDevPlugin(groqApiKey, groqModel, agentPythonBin)],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

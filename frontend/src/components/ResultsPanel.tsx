@@ -148,7 +148,7 @@ export default function ResultsPanel({ result }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 80 }}>
       <ScoreCard result={result} error={result.dataErrors?.scorecard} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}
         className="fade-up fade-up-2">
         <ForumChart data={result.forumChart} error={result.dataErrors?.forumChart} />
         <CulturalSignals signals={result.culturalSignals} error={result.dataErrors?.cultural} />

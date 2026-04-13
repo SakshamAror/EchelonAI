@@ -12,12 +12,12 @@ const USE_DEMO = true;
 const BYPASS_DEMO_AGENT_PROGRESS = false;
 
 const DEFAULT_STEPS: AgentStep[] = [
-  { id: "forum",      label: "Pulling Forum attention data",                status: "pending" },
-  { id: "scraper",    label: "Retrieving cultural signals via Nia / Exa",   status: "pending" },
-  { id: "edgar",      label: "Fetching 10-Q / 10-K from SEC EDGAR",         status: "pending" },
-  { id: "nia",        label: "Indexing filings into Nia · querying MD&A",   status: "pending" },
-  { id: "metrics",    label: "Running Omnara financial agent · yfinance",   status: "pending" },
-  { id: "synthesize", label: "Synthesizing Alpha Score · Groq LLM", status: "pending" },
+  { id: "ticker",     label: "Resolving equity and market data",             status: "pending" },
+  { id: "financials", label: "Fetching financial metrics via yfinance",      status: "pending" },
+  { id: "pricechart", label: "Building quarterly price chart",               status: "pending" },
+  { id: "cultural",   label: "Scanning cultural signals via Tavily",         status: "pending" },
+  { id: "scores",     label: "Computing Echelon scores",                     status: "pending" },
+  { id: "synthesize", label: "Synthesizing analysis via Groq LLM",          status: "pending" },
 ];
 
 function simulateSteps(
@@ -81,9 +81,8 @@ export default function App() {
     setStepsForRun(DEFAULT_STEPS.map(s => ({ ...s, status: "pending" })));
 
     if (USE_DEMO) {
-      const demo = await getAnyStockResultWithLiveMetrics(req);
-
       if (BYPASS_DEMO_AGENT_PROGRESS) {
+        const demo = await getAnyStockResultWithLiveMetrics(req);
         if (runIdRef.current !== runId) return;
         setResult(demo);
         setOverlayOn(false);
@@ -92,26 +91,43 @@ export default function App() {
         return;
       }
 
+      // Run animation and data fetch concurrently.
+      // Loading screen shows immediately; result appears when BOTH are done.
+      let dataResult: AnalysisResult | null = null;
+      let animDone = false;
       let finished = false;
-      const finish = () => {
-        if (finished) return;
+
+      const tryFinish = () => {
+        if (finished || !dataResult || !animDone) return;
         if (runIdRef.current !== runId) return;
         finished = true;
-        setResult(demo);
+        setResult(dataResult);
         setOverlayOn(false);
         setStepsForRun([]);
         setLoading(false);
       };
 
-      // Safety net: even if simulated step timers are delayed, always complete the flow.
-      const failSafeMs = 8000;
-      setTimeout(() => {
-        if (runIdRef.current !== runId) return;
-        setStepsForRun(prev => prev.map(s => ({ ...s, status: "done" })));
-        finish();
-      }, failSafeMs);
+      // Start animation immediately — plays while data is fetching
+      simulateSteps(setStepsForRun, () => {
+        animDone = true;
+        tryFinish();
+      });
 
-      simulateSteps(setStepsForRun, finish);
+      // Fetch data in parallel (not awaited — runs alongside animation)
+      getAnyStockResultWithLiveMetrics(req).then(demo => {
+        if (runIdRef.current !== runId) return;
+        dataResult = demo;
+        tryFinish();
+      });
+
+      // Failsafe: if either side stalls, force-complete after 15s
+      setTimeout(() => {
+        if (runIdRef.current !== runId || finished) return;
+        setStepsForRun(prev => prev.map(s => ({ ...s, status: "done" })));
+        animDone = true;
+        tryFinish();
+      }, 15000);
+
       return;
     }
 
@@ -146,7 +162,7 @@ export default function App() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className="font-bebas" style={{ fontSize: 28, letterSpacing: 4, color: "var(--accent)" }}>
-            Forum<span style={{ color: "var(--text)" }}>Alpha</span>
+            Echelon<span style={{ color: "var(--text)" }}>AI</span>
           </span>
           <span style={{ fontSize: 10, letterSpacing: "0.2em", color: "var(--text-muted)" }}>
             Cultural Signal Intelligence
@@ -209,11 +225,11 @@ export default function App() {
       }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)",
           animation: "statusPulse 2s infinite", flexShrink: 0 }} />
-        <span>Forum API</span>
+        <span>Search Agent</span>
         <span style={{ color: "var(--text-dim)" }}>·</span>
-        <span>Nia · Exa</span>
+        <span>Tavily API</span>
         <span style={{ color: "var(--text-dim)" }}>·</span>
-        <span>Omnara Agent</span>
+        <span>Financial Agent</span>
         <span style={{ marginLeft: "auto" }}>
           Not financial advice. Educational signal intelligence only.
         </span>

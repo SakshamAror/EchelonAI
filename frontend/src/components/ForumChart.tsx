@@ -30,8 +30,8 @@ export default function ForumChart({ data, error }: Props) {
   }
 
   const { points, labels, peakIndex, peakLabel, deltaPrice, startPrice, endPrice, highPrice, lowPrice } = data;
-  const W = 400;
-  const H = 80;
+  const W = 600;
+  const H = 160;
   const n = points.length;
   const denom = Math.max(n - 1, 1);
 
@@ -47,89 +47,120 @@ export default function ForumChart({ data, error }: Props) {
 
   const clampedPeakIndex = Math.max(0, Math.min(pts.length - 1, peakIndex));
   const peak = pts[clampedPeakIndex] ?? { x: 0, y: H };
-  const labelPositions = [4, W / 2 - 24, W - 42];
+
+  // Express peak position as % of SVG width for HTML overlay
+  const peakPct = `${((peak.x / W) * 100).toFixed(2)}%`;
+  const peakTopPct = `${((peak.y / H) * 100).toFixed(2)}%`;
+
+  const isUp = deltaPrice >= 0;
+  const deltaColor = isUp ? "var(--green)" : "var(--red)";
 
   return (
     <div className="panel-box">
       <div className="panel-label">Stock Price / Quarter</div>
 
-      <div style={{ height: 80, marginBottom: 12 }}>
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          style={{ width: "100%", height: "100%", overflow: "visible" }}
-          preserveAspectRatio="none"
-        >
-          <defs>
-            <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3ddc84" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="#3ddc84" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-
-          {[20, 40, 60].map((y) => (
-            <line key={y} x1="0" y1={y} x2={W} y2={y} stroke="#222" strokeWidth="1" />
-          ))}
-
-          <path d={fillPath} fill="url(#priceGrad)" />
-
-          <polyline
-            points={polyline}
-            fill="none"
-            stroke="#3ddc84"
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-          />
-
-          <line
-            x1={peak.x}
-            y1={peak.y}
-            x2={peak.x}
-            y2="2"
-            stroke="#3ddc84"
-            strokeWidth="1"
-            strokeDasharray="3,3"
-          />
-          <circle cx={peak.x} cy={peak.y} r="3.5" fill="#3ddc84" />
-          <text
-            x={peak.x + 5}
-            y="10"
-            fill="#3ddc84"
-            fontFamily="DM Mono, monospace"
-            fontSize="8"
-          >
-            {peakLabel}
-          </text>
-
-          {labels.slice(0, 3).map((lbl, i) => (
-            <text
-              key={`${lbl}-${i}`}
-              x={labelPositions[i]}
-              y={H + 12}
-              fill="#555550"
-              fontFamily="DM Mono, monospace"
-              fontSize="7"
-            >
-              {lbl}
-            </text>
-          ))}
-        </svg>
+      {/* ── Big full-width price change metric ─────────────────── */}
+      <div style={{
+        display: "flex",
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        borderLeft: `4px solid ${deltaColor}`,
+        paddingLeft: 16,
+        marginBottom: 20,
+      }}>
+        <div>
+          <p style={{ fontSize: 9, letterSpacing: "0.25em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 4 }}>
+            Quarterly Price Change
+          </p>
+          <p className="font-bebas" style={{ fontSize: 56, lineHeight: 1, color: deltaColor, letterSpacing: "0px" }}>
+            {isUp ? "+" : ""}{deltaPrice.toFixed(2)}%
+          </p>
+        </div>
+        <div style={{ textAlign: "right", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.8 }}>
+          <div>High <span style={{ color: "var(--green)", marginLeft: 6 }}>{fmtUsd(highPrice)}</span></div>
+          <div>Low <span style={{ color: "var(--red)", marginLeft: 6 }}>{fmtUsd(lowPrice)}</span></div>
+          <div style={{ fontSize: 10, marginTop: 4 }}>
+            {fmtUsd(startPrice)} <span style={{ color: "var(--text-dim)" }}>→</span> {fmtUsd(endPrice)}
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 20, fontSize: 10, color: "var(--text-muted)", marginTop: 18, flexWrap: "wrap" }}>
-        <span>
-          Start: <span style={{ color: "var(--text)" }}>{fmtUsd(startPrice)}</span>
-        </span>
-        <span>
-          End: <span style={{ color: "var(--text)" }}>{fmtUsd(endPrice)}</span>
-        </span>
-        <span>
-          High/Low: <span style={{ color: "var(--green)" }}>{fmtUsd(highPrice)}</span> / <span style={{ color: "var(--red)" }}>{fmtUsd(lowPrice)}</span>
-        </span>
-        <span>
-          Δ Price: <span style={{ color: deltaPrice >= 0 ? "var(--green)" : "var(--red)" }}>
-            {deltaPrice >= 0 ? "+" : ""}{deltaPrice.toFixed(2)}%
-          </span>
-        </span>
+      {/* ── Chart: SVG lines + HTML text overlay ───────────────── */}
+      <div style={{ position: "relative", marginBottom: 28 }}>
+
+        {/* SVG — no text nodes to avoid stretching */}
+        <div style={{ height: 160 }}>
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            style={{ width: "100%", height: "100%", overflow: "visible" }}
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#3ddc84" stopOpacity="0.28" />
+                <stop offset="100%" stopColor="#3ddc84" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
+            {[40, 80, 120].map((y) => (
+              <line key={y} x1="0" y1={y} x2={W} y2={y} stroke="#222" strokeWidth="1" />
+            ))}
+
+            <path d={fillPath} fill="url(#priceGrad)" />
+
+            <polyline
+              points={polyline}
+              fill="none"
+              stroke="#3ddc84"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+
+            {/* Peak dashed vertical + dot (no text) */}
+            <line
+              x1={peak.x} y1={peak.y}
+              x2={peak.x} y2="2"
+              stroke="#3ddc84" strokeWidth="1" strokeDasharray="3,3"
+            />
+            <circle cx={peak.x} cy={peak.y} r="3.5" fill="#3ddc84" />
+          </svg>
+        </div>
+
+        {/* Peak label — HTML overlay, not stretched by SVG transform */}
+        <div style={{
+          position: "absolute",
+          left: peakPct,
+          top: peakTopPct,
+          transform: "translate(-50%, -140%)",
+          fontSize: 10,
+          color: "#3ddc84",
+          fontFamily: "'DM Mono', monospace",
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+        }}>
+          {peakLabel}
+        </div>
+
+        {/* X-axis labels — HTML row below chart, not inside SVG */}
+        <div style={{
+          position: "absolute",
+          bottom: -20,
+          left: 0,
+          right: 0,
+          display: "flex",
+          justifyContent: "space-between",
+          pointerEvents: "none",
+        }}>
+          {labels.slice(0, 3).map((lbl, i) => (
+            <span key={`${lbl}-${i}`} style={{
+              fontSize: 10,
+              color: "#555550",
+              fontFamily: "'DM Mono', monospace",
+            }}>
+              {lbl}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

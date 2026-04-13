@@ -5,5 +5,7 @@
 
 frontend/.env
 frontend/.env.*
-!frontend/.env.example
 
+__pycache__/
+*.pyc
+!frontend/.env.example
