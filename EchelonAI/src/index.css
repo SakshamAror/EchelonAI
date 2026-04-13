@@ -56,11 +56,11 @@
     background: repeating-linear-gradient(
       0deg,
       transparent 0px,
-      transparent 56px,
-      rgba(61, 220, 132, 0.022) 56px,
-      rgba(61, 220, 132, 0.022) 58px
+      transparent 50px,
+      rgba(210, 150, 30, 0.032) 50px,
+      rgba(210, 150, 30, 0.032) 55px
     );
-    animation: barScroll 10s linear infinite;
+    animation: barScroll 6s linear infinite;
     pointer-events: none;
     z-index: 0;
   }
@@ -195,7 +195,7 @@
 
   @keyframes barScroll {
     from { transform: translateY(0); }
-    to   { transform: translateY(58px); }
+    to   { transform: translateY(55px); }
   }
 
   @media (max-width: 980px) {
