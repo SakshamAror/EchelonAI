@@ -8,6 +8,39 @@ import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 
 const execFileAsync = promisify(execFile);
+
+// Mutable runtime key state — populated by /settings endpoint, injected into subprocesses as env vars
+const runtimeKeys = { groqApiKey: "", tavilyApiKey: "" };
+
+function maskKey(key: string): string {
+  if (!key) return "";
+  if (key.length < 12) return "***";
+  return `${key.slice(0, 6)}...${key.slice(-4)}`;
+}
+
+async function validateGroqKey(apiKey: string, model: string): Promise<{ valid: boolean; error?: string }> {
+  if (!apiKey) return { valid: false, error: "No API key provided" };
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+    });
+    if (res.ok) return { valid: true };
+    const detail = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    return { valid: false, error: detail?.error?.message || `HTTP ${res.status}` };
+  } catch (err) {
+    return { valid: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+}
+
+function validateTavilyFormat(key: string): { valid: boolean; error?: string } {
+  if (!key) return { valid: false, error: "No API key provided" };
+  if (!key.startsWith("tvly-")) return { valid: false, error: "Tavily keys must start with 'tvly-'" };
+  if (key.length < 20) return { valid: false, error: "Key appears too short" };
+  return { valid: true };
+}
+
 const yahooScriptPath = path.resolve(__dirname, "./scripts/fetch-yfinance-metrics.mjs");
 const yahooResolveScriptPath = path.resolve(__dirname, "./scripts/resolve-yahoo-ticker.mjs");
 const yahooSearchScriptPath = path.resolve(__dirname, "./scripts/search-yahoo-equities.mjs");
@@ -49,20 +82,19 @@ function buildSynthesisPrompt(input: AlphaSynthesisInput) {
     summary: "string",
     reasoning: [
       {
-        insight: "string",
-        whyItMatters: "string",
-        metricCitations: ["priceChangePercent", "epsSurprisePercent"],
-        culturalSignalCitations: [1, 2],
+        point: "string",
+        metricCitations: ["returnOnEquity"],
+        culturalSignalCitations: [1],
       },
     ],
   };
 
   const priceContext = typeof input.priceDeltaPercent === "number"
-    ? `The stock ${input.priceDeltaPercent >= 0 ? "rose" : "fell"} ${Math.abs(input.priceDeltaPercent).toFixed(2)}% over the quarter.`
+    ? `Stock ${input.priceDeltaPercent >= 0 ? "rose" : "fell"} ${Math.abs(input.priceDeltaPercent).toFixed(2)}% over the quarter.`
     : "";
 
   const scoreContext = input.scores
-    ? `Echelon scores: Financial ${input.scores.financialScore.toFixed(1)}/100 · Cultural ${input.scores.culturalScore.toFixed(1)}/100 · Overall ${input.scores.echelonScore.toFixed(1)}/100.`
+    ? `Echelon scores — Financial: ${input.scores.financialScore.toFixed(1)}/100, Cultural: ${input.scores.culturalScore.toFixed(1)}/100, Overall: ${input.scores.echelonScore.toFixed(1)}/100.`
     : "";
 
   const sentimentCounts = input.displayedCulturalSignals.reduce(
@@ -74,46 +106,31 @@ function buildSynthesisPrompt(input: AlphaSynthesisInput) {
     .join(", ");
 
   return `
-You are an Echelon analyst writing a retrospective signal synthesis for ${input.companyName} (${input.ticker}) — Q${input.timeframe.quarter} ${input.timeframe.year}.
+You are a financial analyst writing a retrospective for ${input.companyName} (${input.ticker}), Q${input.timeframe.quarter} ${input.timeframe.year}.
 ${priceContext} ${scoreContext}
+Cultural signal mix: ${sentimentSummary || "none"}.
 
-Your job: explain, causally and in past tense, how the interplay of financial fundamentals and cultural/media signals drove the stock's narrative and price action during this quarter.
-
-SENTIMENT KEY for DATA.displayedCulturalSignals:
-  "pos"     = market-positive coverage (upgrades, beats, product wins, bullish narrative)
-  "neg"     = market-negative coverage (misses, lawsuits, regulatory risk, bearish narrative)
-  "neutral" = ambiguous or informational coverage with no clear directional signal
-Cultural signal mix this quarter: ${sentimentSummary || "no signals available"}.
-
-Output must be strict JSON matching this exact shape:
+Return strict JSON matching this shape exactly:
 ${JSON.stringify(schema, null, 2)}
 
-WRITING RULES — follow every one:
-1)  summary: 6-9 sentences, past tense. Structure it as:
-      - Sentence 1-2: Overall quarter narrative — what happened to the stock and why at a high level.
-      - Sentence 3-4: Most significant cultural signal(s) — what the coverage said, its sentiment, and how it shaped market perception.
-      - Sentence 5-6: Key financial factors — which metrics were strongest or weakest and what they revealed.
-      - Sentence 7-9: How cultural and financial signals interacted causally, plus confidence caveats.
-2)  reasoning: 6-10 items ordered most → least important. Aim for roughly half cultural, half financial.
-3)  For every CULTURAL reasoning item:
-      - insight: state specifically what the signal said, its sentiment, and what narrative it created for investors (past tense, 1 sentence).
-      - whyItMatters: explain the causal chain — how this coverage shifted perception, sentiment, or positioning (2 sentences max).
-4)  For every FINANCIAL reasoning item:
-      - insight: state the metric value and what it revealed about the business (past tense, 1 sentence).
-      - whyItMatters: explain what this implied for valuation, risk, or growth trajectory (2 sentences max).
-5)  metricCitations: only keys from DATA.displayedMetricKeys.
-6)  culturalSignalCitations: only indices from DATA.displayedCulturalSignals[].index.
-7)  Every reasoning item must cite at least one metric OR one signal — never zero citations.
-8)  Cover ALL non-null metric keys across the full reasoning list.
-9)  Cover ALL cultural signal indices at least once if signals exist.
-10) Skip reasoning items for null metrics — mention data gaps in summary only.
-11) Do NOT invent facts, dates, or numbers not present in DATA.
-12) Do NOT use outside knowledge. Only DATA.
-13) Past tense throughout: "reported", "showed", "rose", "fell", "faced", "posted". NOT "is", "has", "remains", "continues".
-14) No hype, no generic filler, no investment advice.
-15) Negative cultural signals are equally important as financial ones — do not downplay them.
-16) If cultural score was low (< 45), explicitly explain which signals drove sentiment down and why.
-17) If cultural score was high (> 65), explain which positive signals reinforced the bullish narrative.
+RULES — no exceptions:
+1) summary: 6-9 sentences split into 2-3 paragraphs, each separated by a literal "\\n\\n". Structure:
+   - Paragraph 1 (2-3 sentences): What happened to the stock overall — price direction, magnitude, and the single most dominant driver.
+   - Paragraph 2 (2-3 sentences): The most impactful cultural signals. Name each signal by what it was about, quote or paraphrase its core claim, and explain concretely why and how it moved investor sentiment or the stock price.
+   - Paragraph 3 (2-3 sentences): The most revealing financial metrics. State their actual values, compare to typical benchmarks, and explain what each revealed about the business and how it shaped price action or valuation.
+   Past tense only. No hedging ("may", "could", "might"), no filler, no investment advice, no meta-commentary.
+2) reasoning: 5-8 items, ordered most → least impactful. Each point is 1-2 sentences: state the fact from DATA and its direct market implication. Terse and factual.
+   - CRITICAL: every bullet must have a definitive positive OR negative market impact. If the direction is ambiguous or neutral, omit the bullet entirely.
+   - NEVER use hedging words: "may", "might", "could", "perhaps", "possibly", "not enough", "may not have". State only definitive facts.
+   - NEVER write bullets about metrics that are null, unavailable, or N/A.
+3) Citation segregation — CRITICAL: financial metric bullets must ONLY cite metricCitations (set culturalSignalCitations to []). Cultural/news bullets must ONLY cite culturalSignalCitations (set metricCitations to []). NEVER mix both in one bullet.
+4) Cultural signal sentiment key: "pos" = bullish coverage, "neg" = bearish coverage, "neutral" = ambiguous.
+5) metricCitations: only keys present in DATA.displayedMetricKeys.
+6) culturalSignalCitations: only indices from DATA.displayedCulturalSignals[].index.
+7) Every reasoning item must cite ≥1 metric OR ≥1 signal.
+8) Cover every non-null metric key and every signal index across the full reasoning list.
+9) Past tense only: "reported", "fell", "posted", "showed". Never "is", "has", "remains".
+10) Use only DATA below — no outside knowledge, no invented numbers.
 
 DATA:
 ${JSON.stringify(input, null, 2)}
@@ -166,10 +183,57 @@ async function callGroqSynthesis(input: AlphaSynthesisInput, apiKey: string, mod
   return parseJsonContent(text);
 }
 
-function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string, agentPythonBin: string) {
+function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
   return {
     name: "yahoo-metrics-dev-endpoint",
     configureServer(server: import("vite").ViteDevServer) {
+
+      // ── Settings: save API keys to .env + validate ───────────────
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url ?? "/", "http://localhost");
+        if (url.pathname !== "/settings") return next();
+
+        res.setHeader("Content-Type", "application/json");
+
+        if (req.method === "GET") {
+          res.statusCode = 200;
+          res.end(JSON.stringify({
+            hasGroqKey: !!runtimeKeys.groqApiKey,
+            hasTavilyKey: !!runtimeKeys.tavilyApiKey,
+            groqKeyMasked: maskKey(runtimeKeys.groqApiKey),
+            tavilyKeyMasked: maskKey(runtimeKeys.tavilyApiKey),
+          }));
+          return;
+        }
+
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        try {
+          const body = (await readJsonBody(req)) as { groqApiKey?: string; tavilyApiKey?: string };
+          const newGroq = (body.groqApiKey ?? "").trim();
+          const newTavily = (body.tavilyApiKey ?? "").trim();
+
+          if (newGroq) runtimeKeys.groqApiKey = newGroq;
+          if (newTavily) runtimeKeys.tavilyApiKey = newTavily;
+
+          const [groqResult, tavilyResult] = await Promise.all([
+            validateGroqKey(newGroq || runtimeKeys.groqApiKey, groqModel),
+            Promise.resolve(validateTavilyFormat(newTavily || runtimeKeys.tavilyApiKey)),
+          ]);
+
+          res.statusCode = 200;
+          res.end(JSON.stringify({ saved: true, groq: groqResult, tavily: tavilyResult }));
+        } catch (err) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ detail: err instanceof Error ? err.message : "Settings save failed" }));
+        }
+        return;
+      });
+
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/agent-data")) return next();
         if (req.method !== "GET") {
@@ -205,6 +269,11 @@ function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string, agentPytho
             {
               cwd: __dirname,
               maxBuffer: 4 * 1024 * 1024,
+              env: {
+                ...process.env,
+                TAVILY_API_KEY: runtimeKeys.tavilyApiKey,
+                GROQ_API_KEY: runtimeKeys.groqApiKey,
+              },
             }
           );
 
@@ -355,7 +424,7 @@ function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string, agentPytho
 
         try {
           const body = (await readJsonBody(req)) as AlphaSynthesisInput;
-          const result = await callGroqSynthesis(body, groqApiKey, groqModel);
+          const result = await callGroqSynthesis(body, runtimeKeys.groqApiKey, groqModel);
           res.statusCode = 200;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(result));
@@ -372,15 +441,17 @@ function yahooMetricsDevPlugin(groqApiKey: string, groqModel: string, agentPytho
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const groqApiKey = env.GROQ_API_KEY || process.env.GROQ_API_KEY || "";
   const groqModel = env.GROQ_MODEL || process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
   const agentPythonBin =
     env.AGENT_PYTHON_BIN ||
     process.env.AGENT_PYTHON_BIN ||
     (existsSync(defaultAgentPythonPath) ? defaultAgentPythonPath : "python3");
 
+  // Keys live in localStorage (browser) — synced here in-memory via /settings on page load.
+  // No file storage. On server restart, the browser re-syncs keys automatically.
+
   return {
-    plugins: [react(), yahooMetricsDevPlugin(groqApiKey, groqModel, agentPythonBin)],
+    plugins: [react(), yahooMetricsDevPlugin(groqModel, agentPythonBin)],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

@@ -2,9 +2,11 @@
 // App.tsx — root layout + state only. No business logic. Add sections in components/.
 
 import { useEffect, useRef, useState } from "react";
+import { Settings } from "lucide-react";
 import SearchForm, { periodLabel } from "@/components/SearchForm";
 import AgentProgress from "@/components/AgentProgress";
 import ResultsPanel from "@/components/ResultsPanel";
+import SettingsOverlay, { hasStoredKeys, syncKeysToServer } from "@/components/SettingsOverlay";
 import type { AnalysisRequest, AnalysisResult, AgentStep } from "@/types";
 import { getAnyStockResultWithLiveMetrics } from "@/api/demo";
 
@@ -39,12 +41,17 @@ function simulateSteps(
 
 export default function App() {
   const runIdRef = useRef(0);
-  const [loading,   setLoading]   = useState(false);
-  const [overlayOn, setOverlayOn] = useState(false);
-  const [steps,     setSteps]     = useState<AgentStep[]>([]);
-  const [result,    setResult]    = useState<AnalysisResult | null>(null);
-  const [error,     setError]     = useState<string | null>(null);
-  const [lastReq,   setLastReq]   = useState<AnalysisRequest | null>(null);
+  const [loading,       setLoading]       = useState(false);
+  const [overlayOn,     setOverlayOn]     = useState(false);
+  const [steps,         setSteps]         = useState<AgentStep[]>([]);
+  const [result,        setResult]        = useState<AnalysisResult | null>(null);
+  const [error,         setError]         = useState<string | null>(null);
+  const [lastReq,       setLastReq]       = useState<AnalysisRequest | null>(null);
+  const [settingsOpen,  setSettingsOpen]  = useState(false);
+  const [keysReady,     setKeysReady]     = useState(() => hasStoredKeys());
+
+  // On mount: sync any stored keys to the Vite dev server's .env
+  useEffect(() => { syncKeysToServer(); }, []);
 
   useEffect(() => {
     if (!result && !error) return;
@@ -172,9 +179,25 @@ export default function App() {
             Beta
           </span>
         </div>
-        <span style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--text-muted)" }}>
-          Not Financial Advice
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <span style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--text-muted)" }}>
+            Not Financial Advice
+          </span>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+            style={{
+              background: "none", border: "1px solid var(--border)", cursor: "pointer",
+              color: keysReady ? "var(--text-muted)" : "var(--accent)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 32, height: 32, transition: "all 0.15s", flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent-dim)"; e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = keysReady ? "var(--text-muted)" : "var(--accent)"; }}
+          >
+            <Settings size={14} />
+          </button>
+        </div>
       </nav>
 
       {/* ── Hero + Form ─────────────────────────────────────────── */}
@@ -191,7 +214,36 @@ export default function App() {
         <p style={{ fontSize: 12, color: "var(--text-muted)", letterSpacing: "0.05em", marginBottom: 48 }}>
           Not prediction. Not noise. Cultural + financial signal, unified.
         </p>
-        <SearchForm onSubmit={handleAnalyze} loading={loading} />
+        <SearchForm onSubmit={handleAnalyze} loading={loading} keysReady={keysReady} />
+
+        {/* First-time nudge — shown until both keys are saved */}
+        {!keysReady && (
+          <div style={{
+            marginTop: 20,
+            padding: "10px 14px",
+            border: "1px solid var(--accent-dim)",
+            background: "rgba(245,166,35,0.04)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.04em" }}>
+              Add your <span style={{ color: "var(--accent)" }}>Groq</span> and <span style={{ color: "var(--accent)" }}>Tavily</span> API keys to enable live analysis.
+            </span>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              style={{
+                background: "var(--accent)", border: "none", color: "#000",
+                fontFamily: "'DM Mono', monospace", fontSize: 10,
+                fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase",
+                padding: "6px 14px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+              }}
+            >
+              Add Keys ⚙
+            </button>
+          </div>
+        )}
       </section>
 
       <hr style={{ border: "none", borderTop: "1px solid var(--border)",
@@ -207,6 +259,13 @@ export default function App() {
         )}
         {result && <ResultsPanel result={result} />}
       </section>
+
+      {/* ── Settings overlay ────────────────────────────────────── */}
+      <SettingsOverlay
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={() => { setKeysReady(true); setSettingsOpen(false); }}
+      />
 
       {/* ── Agent loading overlay ────────────────────────────────── */}
       <AgentProgress

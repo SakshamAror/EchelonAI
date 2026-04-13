@@ -89,6 +89,7 @@ export interface Source {
 export interface ReasoningPoint {
   text: string;
   category: "cultural" | "financial" | "filing";
+  direction?: "pos" | "neg";
   sources: Source[];
 }
 

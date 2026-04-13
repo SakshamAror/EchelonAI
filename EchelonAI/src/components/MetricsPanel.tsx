@@ -17,41 +17,120 @@ type MetricDefinition = {
 };
 
 const METRIC_DEFINITIONS: MetricDefinition[] = [
-  { key: "trailingPE", label: "Trailing P/E", definition: "Share price divided by trailing 12-month earnings per share.", category: "valuation", format: "multiple" },
-  { key: "forwardPE", label: "Forward P/E", definition: "Share price divided by expected forward earnings per share.", category: "valuation", format: "multiple" },
-  { key: "pegRatio", label: "PEG Ratio", definition: "P/E adjusted by expected earnings growth; lower can imply better value vs growth.", category: "valuation", format: "ratio" },
-  { key: "enterpriseToEbitda", label: "EV / EBITDA", definition: "Enterprise value divided by EBITDA; compares valuation across capital structures.", category: "valuation", format: "multiple" },
-  { key: "priceToBook", label: "Price / Book", definition: "Market value relative to book value of equity.", category: "valuation", format: "multiple" },
+  {
+    key: "trailingPE", label: "Trailing P/E", category: "valuation", format: "multiple",
+    definition: "Price paid per $1 of the last 12 months of earnings. Highly sector-dependent — tech typically trades 25–40×, consumer staples 18–25×, utilities 15–20×. Under 12× may signal value or declining growth expectations. Over 50× embeds very high growth assumptions; a guidance miss hits hard. Always compare to sector peers, not an absolute number.",
+  },
+  {
+    key: "enterpriseToEbitda", label: "EV / EBITDA", category: "valuation", format: "multiple",
+    definition: "Total company value (equity + debt − cash) divided by cash operating earnings. Removes capital structure differences, making it useful for comparing companies across leverage levels. 8–12× is typical for mature businesses; >20× implies a significant growth or quality premium. Widely used in M&A and PE analysis to assess deal pricing.",
+  },
+  {
+    key: "priceToBook", label: "Price / Book", category: "valuation", format: "multiple",
+    definition: "Market price vs. the accounting book value of equity. Under 1.0 can mean the market thinks assets are worth less than stated — potential distress or deep value. Tech and pharma often trade 5–15× book due to intangible assets. High P/B is normal for asset-light, high-ROIC businesses. More meaningful for banks, insurers, and asset-heavy industrials.",
+  },
 
-  { key: "returnOnEquity", label: "Return on Equity", definition: "Net income generated per dollar of shareholder equity.", category: "profitability", format: "percent" },
-  { key: "returnOnAssets", label: "Return on Assets", definition: "Net income generated per dollar of total assets.", category: "profitability", format: "percent" },
-  { key: "profitMargins", label: "Profit Margin", definition: "Net income as a share of revenue.", category: "profitability", format: "percent" },
-  { key: "grossMargins", label: "Gross Margin", definition: "Gross profit as a share of revenue.", category: "profitability", format: "percent" },
-  { key: "operatingMargins", label: "Operating Margin", definition: "Operating income as a share of revenue.", category: "profitability", format: "percent" },
-  { key: "ebitdaMargins", label: "EBITDA Margin", definition: "EBITDA as a share of revenue.", category: "profitability", format: "percent" },
+  {
+    key: "returnOnEquity", label: "Return on Equity", category: "profitability", format: "percent",
+    definition: "Net profit generated per dollar of shareholder equity. Above 15% is generally solid; above 20% is strong. Software and consumer brands often exceed 30%. Banks typically target ~10–12%. Negative ROE means the company is destroying shareholder value. Caveat: very high ROE driven by heavy debt rather than profitability can be misleading — check D/E alongside.",
+  },
+  {
+    key: "returnOnAssets", label: "Return on Assets", category: "profitability", format: "percent",
+    definition: "How efficiently the company converts its asset base into profit. Above 5% is solid; above 10% is excellent. Capital-intensive sectors (airlines, manufacturing, utilities) structurally score lower — 1–3% can be acceptable there. Software and services businesses, which hold few assets, should clear 10%+ comfortably. Negative ROA signals unprofitability.",
+  },
+  {
+    key: "profitMargins", label: "Net Profit Margin", category: "profitability", format: "percent",
+    definition: "Percentage of revenue kept as net income after all costs, interest, and taxes. Above 20% is strong for most sectors. Retail and grocery run thin (1–5%); software and pharma can reach 25–40%. Negative margin means the business is unprofitable. Watch for one-time items inflating or depressing the margin — look at the trend, not a single quarter.",
+  },
+  {
+    key: "grossMargins", label: "Gross Margin", category: "profitability", format: "percent",
+    definition: "Revenue minus cost of goods sold, as a percentage of revenue. Reflects pricing power and production efficiency. Above 60% is typical for software and high-end consumer brands. Manufacturing runs 20–40%. Below 15% usually indicates a commoditized or highly competitive product. Gross margin compression is one of the earliest warning signs in earnings reports.",
+  },
+  {
+    key: "operatingMargins", label: "Operating Margin", category: "profitability", format: "percent",
+    definition: "Profitability from core operations before interest and taxes. Above 15% is healthy for most sectors; mature SaaS often targets 20–30%. A negative operating margin means the business burns cash from its core operations — acceptable for early-stage growth but a red flag for mature companies. Improving operating margin over time indicates scaling and cost efficiency.",
+  },
+  {
+    key: "ebitdaMargins", label: "EBITDA Margin", category: "profitability", format: "percent",
+    definition: "Cash operating profitability before debt costs and non-cash charges (depreciation, amortization). Above 25% is strong and widely used in debt analysis and M&A to assess debt serviceability. Common benchmark in PE and leveraged buyout pricing. Be cautious comparing companies with very different capex profiles — high D&A can hide low real cash generation.",
+  },
 
-  { key: "revenueGrowth", label: "Revenue Growth", definition: "Growth rate of revenue from prior comparable period.", category: "growth", format: "percent" },
-  { key: "earningsGrowth", label: "Earnings Growth", definition: "Growth rate of earnings from prior comparable period.", category: "growth", format: "percent" },
+  {
+    key: "revenueGrowth", label: "Revenue Growth", category: "growth", format: "percent",
+    definition: "Year-over-year change in total revenue. Above 10% is solid for large-cap companies; above 25% is high-growth territory. Negative revenue growth is a red flag unless the business is undergoing a deliberate restructuring or is cyclical. Compare against the sector's growth rate — beating the industry is more meaningful than an absolute number.",
+  },
+  {
+    key: "earningsGrowth", label: "Earnings Growth", category: "growth", format: "percent",
+    definition: "Year-over-year change in EPS or net income. Above 10% is needed to sustain most valuation multiples; above 20% justifies premium pricing. If earnings grow much slower than revenue, margins are compressing — a key warning sign. Earnings growing faster than revenue means the business is becoming more efficient. Negative growth puts valuation multiples under pressure.",
+  },
 
-  { key: "freeCashflow", label: "Free Cash Flow", definition: "Operating cash flow minus capital expenditures.", category: "cashflow", format: "currency" },
-  { key: "operatingCashflow", label: "Operating Cash Flow", definition: "Cash generated by core business operations.", category: "cashflow", format: "currency" },
-  { key: "capitalExpenditures", label: "Capital Expenditures", definition: "Cash spent on long-term assets and infrastructure.", category: "cashflow", format: "currency" },
-  { key: "fcf_change", label: "FCF Proxy", definition: "Proxy from operating cash flow minus capex used by the financial agent pipeline.", category: "cashflow", format: "currency" },
-  { key: "totalRevenue", label: "Total Revenue", definition: "Total top-line sales for the selected period snapshot.", category: "cashflow", format: "currency" },
+  {
+    key: "freeCashflow", label: "Free Cash Flow", category: "cashflow", format: "currency",
+    definition: "Cash left after capital expenditures — the clearest measure of financial health. Positive FCF funds dividends, buybacks, debt paydown, and acquisitions. Negative FCF can be appropriate for high-growth companies investing heavily, but must be funded by debt or equity raises. Sustained positive FCF is one of the strongest indicators of long-term business quality.",
+  },
+  {
+    key: "operatingCashflow", label: "Operating Cash Flow", category: "cashflow", format: "currency",
+    definition: "Cash generated by core business operations before investing and financing. Should ideally exceed net income — if it's persistently lower, watch for aggressive revenue recognition or working capital deterioration. A large gap between reported earnings and operating cash flow is a common early flag for earnings quality problems.",
+  },
+  {
+    key: "capitalExpenditures", label: "Capital Expenditures", category: "cashflow", format: "currency",
+    definition: "Cash invested in physical assets, technology, or infrastructure. High capex relative to revenue (>15%) is expected in telecom, energy, and manufacturing — these are asset-heavy industries. Software and services companies run lean (<5%). Rising capex can signal growth investment or deteriorating asset base. Capex deducted from operating cash flow gives free cash flow.",
+  },
+  {
+    key: "fcf_change", label: "FCF Proxy", category: "cashflow", format: "currency",
+    definition: "Agent-computed proxy for free cash flow: operating cash flow minus capital expenditures. Used when direct FCF line items are unavailable from the data source. Positive values indicate a cash-generative business. Treat as an approximation — the actual FCF figure may differ slightly depending on how the company reports working capital adjustments.",
+  },
+  {
+    key: "totalRevenue", label: "Total Revenue", category: "cashflow", format: "currency",
+    definition: "Total top-line revenue for the period. Provides scale context for all other metrics — a 20% profit margin means very different things at $500M vs. $50B in revenue. Use to benchmark size within a sector and assess absolute earning power. On its own, revenue says nothing about profitability; always pair with margin metrics.",
+  },
 
-  { key: "marketCap", label: "Market Cap", definition: "Total equity market value of the company.", category: "balance", format: "currency" },
-  { key: "totalCash", label: "Total Cash", definition: "Cash and cash equivalents on the balance sheet.", category: "balance", format: "currency" },
-  { key: "totalDebt", label: "Total Debt", definition: "Short-term and long-term debt obligations.", category: "balance", format: "currency" },
-  { key: "debtToEquity", label: "Debt / Equity", definition: "Leverage ratio showing debt relative to equity.", category: "balance", format: "ratio" },
-  { key: "currentRatio", label: "Current Ratio", definition: "Current assets divided by current liabilities.", category: "balance", format: "ratio" },
-  { key: "quickRatio", label: "Quick Ratio", definition: "Liquid assets divided by current liabilities.", category: "balance", format: "ratio" },
+  {
+    key: "marketCap", label: "Market Cap", category: "balance", format: "currency",
+    definition: "Total equity market value: share price × shares outstanding. Scale context: mega-cap >$200B, large-cap $10B–$200B, mid-cap $2B–$10B, small-cap <$2B. Larger companies typically have higher institutional ownership, more analyst coverage, and lower volatility. Smaller caps can have higher upside and higher risk. Affects index inclusion and liquidity.",
+  },
+  {
+    key: "totalCash", label: "Total Cash", category: "balance", format: "currency",
+    definition: "Cash and equivalents on the balance sheet. For unprofitable companies, compare against quarterly burn rate to estimate runway. For profitable companies, high cash relative to market cap ('net cash') can signal undervaluation or poor capital allocation. Compare against total debt to assess net leverage — net cash position is a strong balance sheet signal.",
+  },
+  {
+    key: "totalDebt", label: "Total Debt", category: "balance", format: "currency",
+    definition: "Combined short-term and long-term debt. Never analyze in isolation — $10B of debt means very different things for a $200B company vs. a $5B company. Pair with EBITDA (debt/EBITDA) or equity (D/E ratio) to assess sustainability. Utilities and REITs tolerate 4–6× EBITDA debt; tech and services should stay under 2×. Rising debt during revenue declines is a red flag.",
+  },
+  {
+    key: "debtToEquity", label: "Debt / Equity", category: "balance", format: "ratio",
+    definition: "Total debt divided by shareholders' equity. Below 0.5 indicates conservative, low-leverage financing. Above 2.0 is highly leveraged and raises refinancing risk. Sector context is critical — utilities, REITs, and banks structurally run higher D/E (2–5×) due to their business models. For tech and consumer companies, D/E above 1.5 is a concern worth investigating.",
+  },
+  {
+    key: "currentRatio", label: "Current Ratio", category: "balance", format: "ratio",
+    definition: "Current assets divided by current liabilities — a snapshot of short-term liquidity. Above 2.0 is comfortable and means the company can cover near-term obligations twice over. Below 1.0 means current liabilities exceed current assets, flagging potential liquidity stress. A very high ratio (>5) can indicate idle cash or inefficient working capital management.",
+  },
+  {
+    key: "quickRatio", label: "Quick Ratio", category: "balance", format: "ratio",
+    definition: "Current assets minus inventory, divided by current liabilities. A more conservative liquidity test than current ratio — removes inventory, which may be hard to liquidate quickly. Above 1.5 is healthy; below 0.8 is a warning sign. Preferred for evaluating companies with slow-moving or illiquid inventory, such as retailers, manufacturers, or auto companies.",
+  },
 
-  { key: "dividendRate", label: "Dividend Rate", definition: "Annualized dividend amount per share.", category: "dividend", format: "currency" },
-  { key: "dividendYield", label: "Dividend Yield", definition: "Dividend rate divided by share price.", category: "dividend", format: "percent" },
-  { key: "dividend_change", label: "Dividend Change", definition: "Difference between last and previous dividend payouts.", category: "dividend", format: "currency" },
-  { key: "payoutRatio", label: "Payout Ratio", definition: "Fraction of earnings paid out as dividends.", category: "dividend", format: "percent" },
+  {
+    key: "dividendRate", label: "Dividend Rate", category: "dividend", format: "currency",
+    definition: "Annualized cash dividend paid per share. The raw amount is less meaningful than yield (rate ÷ price) and payout ratio (rate ÷ EPS). A rising dividend rate over time is a strong signal of management confidence in sustained earnings. A cut to the dividend rate is one of the most negative events for income-oriented investors and often triggers sharp share price declines.",
+  },
+  {
+    key: "dividendYield", label: "Dividend Yield", category: "dividend", format: "percent",
+    definition: "Annual dividend as a percentage of the current share price. 2–4% is typical for mature dividend payers (consumer staples, utilities). Above 6% can be attractive but may signal payout risk if not backed by strong free cash flow — a 'yield trap'. Growth companies typically yield 0–1% as they retain capital for reinvestment. Yield rises mechanically when the stock falls.",
+  },
+  {
+    key: "dividend_change", label: "Dividend Change", category: "dividend", format: "currency",
+    definition: "Difference between the most recent and prior dividend payment. Increases signal management confidence in future earnings — companies rarely raise dividends unless they expect to sustain them. A cut or suspension is typically a severe negative signal that implies deteriorating cash flow or balance sheet stress. Even a missed expected raise can disappoint income investors.",
+  },
+  {
+    key: "payoutRatio", label: "Payout Ratio", category: "dividend", format: "percent",
+    definition: "Fraction of earnings distributed as dividends. Below 50% is conservative and sustainable for most businesses. Above 80–90% is a warning — even modest earnings pressure could force a cut. Utilities and REITs structurally run 60–80% due to regulation and pass-through structures. If payout ratio exceeds 100%, the dividend is being funded by debt or reserves — unsustainable.",
+  },
 
-  { key: "beta", label: "Beta", definition: "Volatility sensitivity versus the broader market.", category: "risk", format: "number" },
+  {
+    key: "beta", label: "Beta", category: "risk", format: "number",
+    definition: "Measures how much the stock moves relative to the broader market (S&P 500 = 1.0). Beta of 0.8 means ~20% less volatile than the index; beta of 1.5 means ~50% more volatile. Negative beta (gold, some utilities) moves inversely to the market. High-beta stocks amplify both gains and losses — good in bull markets, painful in drawdowns. Defensive investors typically target beta < 1.",
+  },
 ];
 
 function isFiniteNumber(v: unknown): v is number {

@@ -282,8 +282,7 @@ const METRIC_LABEL: Record<DisplayedMetricKey, string> = {
 };
 
 interface LlmReasoningItem {
-  insight: string;
-  whyItMatters: string;
+  point: string;
   metricCitations: DisplayedMetricKey[];
   culturalSignalCitations?: number[];
 }
@@ -495,17 +494,65 @@ function buildFinancialOnlySynthesis(
       : "No usable financial metrics were returned for this period.",
   ];
 
-  const reasoning: ReasoningPoint[] = availableKeys.slice(0, 6).map((key) => ({
-    category: "financial",
-    text: `${METRIC_LABEL[key]} is ${metricValueText(key, metrics)}. Why it matters: ${fallbackWhyItMatters(key)}`,
-    sources: [],
-  }));
+  const reasoning: ReasoningPoint[] = availableKeys.slice(0, 6).map((key) => {
+    const v = metrics[key];
+    const context = v != null ? metricBriefContext(key, v) : "";
+    const valueText = metricValueText(key, metrics);
+    const text = context
+      ? `${METRIC_LABEL[key]} stood at ${valueText}, ${context}`
+      : `${METRIC_LABEL[key]} was ${valueText}.`;
+    return { category: "financial", text, sources: [] };
+  });
 
   return { summary: summaryParts.join(" "), reasoning };
 }
 
 function isMetricKey(value: string): value is DisplayedMetricKey {
   return DISPLAYED_METRIC_KEYS.includes(value as DisplayedMetricKey);
+}
+
+/** Returns a brief interpretive phrase for a metric value, used in fallback bullets. */
+function metricBriefContext(key: DisplayedMetricKey, value: number): string {
+  switch (key) {
+    case "grossMargins":
+      return value >= 0.5 ? "indicating strong production efficiency." : value >= 0.3 ? "reflecting moderate cost control." : "suggesting tight production margins.";
+    case "profitMargins":
+      return value >= 0.15 ? "pointing to healthy net profitability." : value >= 0.05 ? "reflecting slim but positive net income." : value < 0 ? "indicating a net loss on revenue." : "reflecting minimal profit retention.";
+    case "operatingMargins":
+      return value >= 0.2 ? "showing solid core business efficiency." : value >= 0.1 ? "reflecting moderate operational leverage." : value < 0 ? "signaling operating losses." : "indicating tight operating efficiency.";
+    case "ebitdaMargins":
+      return value >= 0.25 ? "reflecting strong cash generation before financing." : value >= 0.1 ? "indicating moderate EBITDA coverage." : "pointing to limited pre-tax earnings headroom.";
+    case "trailingPE":
+      return value > 40 ? "a premium valuation implying high growth expectations." : value > 20 ? "above-average valuation for the period." : value > 10 ? "a moderate valuation in line with peers." : "a compressed valuation, reflecting investor caution.";
+    case "priceToBook":
+      return value > 5 ? "pricing in substantial intangible or brand value." : value > 1 ? "a premium to book value." : "trading at or below book value.";
+    case "enterpriseToEbitda":
+      return value > 20 ? "a premium enterprise multiple implying high growth pricing." : value > 12 ? "within a typical range for established businesses." : value > 0 ? "suggesting value or slower growth expectations." : "";
+    case "returnOnEquity":
+      return value >= 0.2 ? "demonstrating strong shareholder returns." : value >= 0.1 ? "showing moderate equity efficiency." : value < 0 ? "indicating losses relative to equity." : "reflecting below-average equity utilization.";
+    case "returnOnAssets":
+      return value >= 0.1 ? "showing efficient asset deployment." : value >= 0.05 ? "reflecting moderate asset productivity." : value < 0 ? "indicating assets generated a net loss." : "pointing to low asset efficiency.";
+    case "debtToEquity":
+      return value > 2 ? "a highly leveraged balance sheet." : value > 1 ? "above-average debt relative to equity." : "a conservative leverage profile.";
+    case "currentRatio":
+      return value >= 2 ? "indicating strong short-term liquidity." : value >= 1 ? "showing adequate near-term coverage." : "suggesting potential short-term liquidity pressure.";
+    case "revenueGrowth":
+      return value >= 0.1 ? "signaling strong top-line momentum." : value >= 0 ? "reflecting flat to modest revenue gains." : "pointing to a year-over-year revenue contraction.";
+    case "earningsGrowth":
+      return value >= 0.1 ? "showing strong profit expansion." : value >= 0 ? "reflecting modest earnings improvement." : "indicating a year-over-year earnings decline.";
+    case "beta":
+      return value > 1.5 ? "a high-volatility stock relative to the broader market." : value > 0.8 ? "tracking broadly with market movements." : "showing below-market price volatility.";
+    case "dividendYield":
+      return value >= 0.04 ? "an above-average income yield for the period." : value >= 0.01 ? "a modest income contribution to total return." : "a minimal dividend yield.";
+    case "freeCashflow":
+      return value > 0 ? "confirming positive residual cash generation after capex." : "indicating capex exceeded operating cash flows.";
+    case "operatingCashflow":
+      return value > 0 ? "reflecting positive cash generation from operations." : "showing operational cash burn for the period.";
+    case "marketCap":
+      return value > 1e11 ? "a large-cap company by market capitalization." : value > 1e10 ? "a mid-to-large-cap company." : "a smaller-cap valuation for the period.";
+    default:
+      return "";
+  }
 }
 
 function metricValueText(key: DisplayedMetricKey, metrics: FinancialMetrics): string {
@@ -555,33 +602,6 @@ function metricValueText(key: DisplayedMetricKey, metrics: FinancialMetrics): st
   return value.toFixed(2);
 }
 
-function fallbackWhyItMatters(key: DisplayedMetricKey): string {
-  if (key === "trailingPE" || key === "forwardPE" || key === "pegRatio" || key === "enterpriseToEbitda" || key === "priceToBook") {
-    return "This valuation metric helps contextualize whether expectations embedded in price appear conservative, fair, or stretched.";
-  }
-  if (key === "returnOnEquity" || key === "returnOnAssets" || key === "profitMargins" || key === "grossMargins" || key === "operatingMargins" || key === "ebitdaMargins") {
-    return "Profitability metrics show how efficiently revenue and capital are being converted into earnings quality.";
-  }
-  if (key === "revenueGrowth" || key === "earningsGrowth") {
-    return "Growth metrics indicate whether business momentum is expanding or decelerating over time.";
-  }
-  if (key === "debtToEquity" || key === "currentRatio" || key === "quickRatio" || key === "totalDebt" || key === "totalCash") {
-    return "Balance-sheet metrics frame financial resilience, refinancing risk, and short-term liquidity flexibility.";
-  }
-  if (key === "freeCashflow" || key === "operatingCashflow" || key === "capitalExpenditures" || key === "fcf_change" || key === "totalRevenue") {
-    return "Cash-flow and revenue metrics help validate operating durability and reinvestment capacity.";
-  }
-  if (key === "dividendRate" || key === "dividendYield" || key === "dividend_change" || key === "payoutRatio") {
-    return "Dividend metrics indicate how management balances shareholder returns and internal capital needs.";
-  }
-  if (key === "beta") {
-    return "Beta provides a quick view of market-sensitivity and relative volatility risk.";
-  }
-  if (key === "marketCap" || key === "enterpriseValue") {
-    return "Scale metrics help contextualize valuation, risk profile, and peer comparability.";
-  }
-  return "This metric contributes additional context to the current financial setup.";
-}
 
 function isUnavailableNarrative(text: string): boolean {
   const lower = text.toLowerCase();
@@ -607,15 +627,8 @@ function normalizeUnavailableWording(text: string): string {
   return out;
 }
 
-function enrichSummary(summary: string, result: AnalysisResult): string {
-  const cleaned = normalizeUnavailableWording(summary).trim();
-  if (cleaned.length >= 360) return cleaned;
-  const unavailable = DISPLAYED_METRIC_KEYS.filter((k) => result.metrics[k] == null).map((k) => METRIC_LABEL[k]);
-  const caveat =
-    unavailable.length === 0
-      ? "All currently displayed metrics were usable in this interpretation, but the synthesis remains bounded to the provided dataset only."
-      : `Some displayed metrics were unavailable in the current pipeline (${unavailable.join(", ")}), so they could not be used as explanatory evidence; this does not imply the company did not report them.`;
-  return `${cleaned} ${caveat}`.trim();
+function enrichSummary(summary: string): string {
+  return normalizeUnavailableWording(summary).trim();
 }
 
 async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmSynthesisResponse | null; error: string | null }> {
@@ -667,7 +680,7 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
     const validReasoning: LlmReasoningItem[] = [];
 
     for (const raw of payload.reasoning) {
-      if (!raw || typeof raw.insight !== "string" || typeof raw.whyItMatters !== "string") continue;
+      if (!raw || typeof raw.point !== "string") continue;
       const metricCitations = Array.isArray(raw.metricCitations)
         ? raw.metricCitations.filter(
             (k): k is DisplayedMetricKey =>
@@ -678,17 +691,11 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
         ? raw.culturalSignalCitations.filter((idx): idx is number => Number.isInteger(idx) && idx >= 1 && idx <= result.culturalSignals.length)
         : [];
       if (metricCitations.length === 0 && culturalSignalCitations.length === 0) continue;
-      let insight = normalizeUnavailableWording(raw.insight.trim());
-      let whyItMatters = normalizeUnavailableWording(raw.whyItMatters.trim());
-      if (isUnavailableNarrative(insight) || isUnavailableNarrative(whyItMatters)) continue;
+      const point = normalizeUnavailableWording(raw.point.trim());
+      if (isUnavailableNarrative(point)) continue;
       metricCitations.forEach((k) => seenMetricKeys.add(k));
       culturalSignalCitations.forEach((idx) => seenSignalIdx.add(idx));
-      validReasoning.push({
-        insight,
-        whyItMatters,
-        metricCitations,
-        culturalSignalCitations,
-      });
+      validReasoning.push({ point, metricCitations, culturalSignalCitations });
     }
 
     if (validReasoning.length === 0) {
@@ -698,9 +705,14 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
     const availableMetricKeys = DISPLAYED_METRIC_KEYS.filter((k) => result.metrics[k] != null);
     const missingMetricKeys = availableMetricKeys.filter((k) => !seenMetricKeys.has(k));
     for (const key of missingMetricKeys) {
+      const v = result.metrics[key];
+      const context = v != null ? metricBriefContext(key, v) : "";
+      const valueText = metricValueText(key, result.metrics);
+      const point = context
+        ? `${METRIC_LABEL[key]} stood at ${valueText}, ${context}`
+        : `${METRIC_LABEL[key]} was ${valueText}.`;
       validReasoning.push({
-        insight: `${METRIC_LABEL[key]} is ${metricValueText(key, result.metrics)}.`,
-        whyItMatters: fallbackWhyItMatters(key),
+        point,
         metricCitations: [key],
         culturalSignalCitations: [],
       });
@@ -713,8 +725,7 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
     for (const idx of missingSignalIdx) {
       const sig = result.culturalSignals[idx - 1];
       validReasoning.push({
-        insight: `Cultural signal ${idx}: ${sig.text}`,
-        whyItMatters: "It captures external narrative pressure that can affect sentiment and positioning.",
+        point: sig.text,
         metricCitations: [],
         culturalSignalCitations: [idx],
       });
@@ -722,7 +733,7 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
 
     return {
       payload: {
-        summary: enrichSummary(payload.summary, result),
+        summary: enrichSummary(payload.summary),
         reasoning: validReasoning.slice(0, 10),
       },
       error: null,
@@ -859,16 +870,28 @@ async function buildLiveResultFromBase(
       };
     }
 
+    const NEG_FINANCIAL_WORDS = /\b(fell|fall|decline[ds]?|drop[ps]?|dropped|loss|losses|weak|miss(?:ed)?|below|disappoint|shrink|shrank|cut|cuts|negative|lower(?:ed)?|compress(?:ed)?|concern|deteriorat|worsen|contraction|contracted)\b/i;
     const mappedReasoning: ReasoningPoint[] = llm.reasoning
-      .filter((item) => !isUnavailableNarrative(`${item.insight} ${item.whyItMatters}`))
+      .filter((item) => !isUnavailableNarrative(item.point))
       .map((item) => {
-        const combined = `${item.insight} Why it matters: ${item.whyItMatters}`.trim();
+        const isCultural = (item.culturalSignalCitations?.length ?? 0) > 0;
+        const category: ReasoningPoint["category"] = isCultural ? "cultural" : "financial";
 
-        return {
-          text: combined,
-          category: (item.culturalSignalCitations?.length ?? 0) > 0 ? "cultural" : "financial",
-          sources: [],
-        };
+        let direction: ReasoningPoint["direction"];
+        if (isCultural) {
+          const citations: number[] = item.culturalSignalCitations ?? [];
+          const hasNegSignal = citations.some((idx) => {
+            const signal = resultWithLiveMetrics.culturalSignals[idx - 1];
+            return signal?.sentiment === "neg";
+          });
+          // Also check text directly — catches cases where LLM cites positive signals
+          // but the bullet text itself describes a negative outcome
+          direction = (hasNegSignal || NEG_FINANCIAL_WORDS.test(item.point)) ? "neg" : "pos";
+        } else {
+          direction = NEG_FINANCIAL_WORDS.test(item.point) ? "neg" : "pos";
+        }
+
+        return { text: item.point, category, direction, sources: [] };
       });
 
     return {

@@ -325,7 +325,7 @@ def search_cultural_events(term: str, year: int, month: int) -> List[Dict[str, o
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "TAVILY_API_KEY is not set. Add it to a .env file or your environment."
+            "TAVILY_API_KEY is not set. Add it via the Settings panel in the app."
         )
 
     client = TavilyClient(api_key=api_key)

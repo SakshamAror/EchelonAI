@@ -8,6 +8,7 @@ import type { AnalysisRequest, TimeFrame } from "@/types";
 interface Props {
   onSubmit: (req: AnalysisRequest) => void;
   loading: boolean;
+  keysReady?: boolean;
 }
 
 interface EquitySearchResult {
@@ -85,7 +86,7 @@ const BASE: React.CSSProperties = {
   width: "100%",
 };
 
-export default function SearchForm({ onSubmit, loading }: Props) {
+export default function SearchForm({ onSubmit, loading, keysReady = true }: Props) {
   const [query, setQuery] = useState("");
   const [selectedEquity, setSelectedEquity] = useState<EquitySearchResult | null>(null);
   const [timeframe, setTimeframe] = useState<TimeFrame>(DEFAULT_TIMEFRAME);
@@ -199,7 +200,7 @@ export default function SearchForm({ onSubmit, loading }: Props) {
     setShowResults(false);
   }
 
-  const canSubmit = !!query.trim() && !loading && !searchLoading && (selectedEquity !== null || results.length > 0);
+  const canSubmit = keysReady && !!query.trim() && !loading && !searchLoading && (selectedEquity !== null || results.length > 0);
 
   return (
     <form onSubmit={handleSubmit}>
@@ -382,7 +383,7 @@ export default function SearchForm({ onSubmit, loading }: Props) {
             e.currentTarget.style.transform = "none";
           }}
         >
-          {loading ? "Analyzing..." : "Analyze →"}
+          {loading ? "Analyzing..." : !keysReady ? "Add API Keys →" : "Analyze →"}
         </button>
       </div>
 

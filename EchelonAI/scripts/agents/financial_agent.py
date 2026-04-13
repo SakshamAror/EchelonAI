@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import calendar
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import yfinance as yf
@@ -264,6 +264,155 @@ def _closest_col(df: Any, t: date) -> Optional[Any]:
     return min(cols, key=lambda c: abs((_column_date(c) - t).days))
 
 
+def _quarter_end(year: int, month: int) -> date:
+    """Last calendar day of `month` (pass the last month of the quarter: 3, 6, 9, or 12)."""
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def _get_quarter_end_price(ticker_obj: yf.Ticker, year: int, month: int) -> Optional[float]:
+    """Closing price on the last trading day on or before the quarter-end date."""
+    try:
+        qend = _quarter_end(year, month)
+        hist = ticker_obj.history(
+            start=(qend - timedelta(days=7)).isoformat(),
+            end=(qend + timedelta(days=1)).isoformat(),
+            auto_adjust=True,
+        )
+        if hist is None or getattr(hist, "empty", False):
+            return None
+        return float(hist["Close"].iloc[-1])
+    except Exception:
+        return None
+
+
+def _compute_ttm_eps(
+    income_df: Any, target_col: Any, shares: float
+) -> Optional[float]:
+    """Sum of Net Income over the 4 most recent quarters up to target_col, divided by shares."""
+    try:
+        if income_df is None or getattr(income_df, "empty", False) or target_col is None:
+            return None
+        if "Net Income" not in income_df.index:
+            return None
+        target_date = _column_date(target_col)
+        if not target_date:
+            return None
+        cols = sorted(
+            [c for c in income_df.columns if _column_date(c) and _column_date(c) <= target_date],
+            key=lambda c: _column_date(c),
+            reverse=True,
+        )[:4]
+        if len(cols) < 4:
+            return None
+        total = 0.0
+        for col in cols:
+            v = _sanitize_value(income_df.loc["Net Income", col])
+            if v is None:
+                return None
+            total += float(v)
+        return total / shares
+    except Exception:
+        return None
+
+
+def _compute_yoy_growth_df(
+    df: Any, target_col: Any, row_label: str
+) -> Optional[float]:
+    """YoY growth for `row_label`: (current_quarter – year_ago_quarter) / |year_ago_quarter|."""
+    try:
+        if df is None or getattr(df, "empty", False) or target_col is None:
+            return None
+        if row_label not in df.index:
+            return None
+        target_date = _column_date(target_col)
+        if not target_date:
+            return None
+        prior_target = date(target_date.year - 1, target_date.month, target_date.day)
+        prior_col = None
+        min_diff: Optional[int] = None
+        for c in df.columns:
+            d = _column_date(c)
+            if d and d < target_date:
+                diff = abs((d - prior_target).days)
+                if min_diff is None or diff < min_diff:
+                    min_diff = diff
+                    prior_col = c
+        if prior_col is None or (min_diff is not None and min_diff > 95):
+            return None
+        current = _sanitize_value(df.loc[row_label, target_col])
+        prior = _sanitize_value(df.loc[row_label, prior_col])
+        if current is None or prior is None or float(prior) == 0.0:
+            return None
+        return (float(current) - float(prior)) / abs(float(prior))
+    except Exception:
+        return None
+
+
+def _compute_ebitda_margin_df(income_df: Any, target_col: Any) -> Optional[float]:
+    """EBITDA margin from the quarterly income statement.
+    Tries direct 'EBITDA' row first, then Operating Income + D&A."""
+    try:
+        if income_df is None or getattr(income_df, "empty", False) or target_col is None:
+            return None
+        idx = income_df.index
+
+        def get_row(labels: List[str]) -> Optional[float]:
+            for lbl in labels:
+                if lbl in idx:
+                    v = _sanitize_value(income_df.loc[lbl, target_col])
+                    if v is not None:
+                        return float(v)
+            return None
+
+        revenue = get_row(["Total Revenue", "Revenue", "Net Revenue"])
+        if not revenue:
+            return None
+
+        ebitda = get_row(["EBITDA", "Normalized EBITDA"])
+        if ebitda is None:
+            op_inc = get_row(["Operating Income", "Total Operating Income As Reported"])
+            da = get_row([
+                "Reconciled Depreciation",
+                "Depreciation And Amortization",
+                "Depreciation Amortization Depletion",
+                "Depreciation",
+            ])
+            if op_inc is None:
+                return None
+            ebitda = op_inc + (abs(da) if da is not None else 0.0)
+
+        return ebitda / revenue
+    except Exception:
+        return None
+
+
+def _compute_beta_at_quarter(
+    ticker_obj: yf.Ticker, year: int, month: int
+) -> Optional[float]:
+    """1-year rolling beta vs S&P 500 ending at the quarter-end date."""
+    try:
+        qend = _quarter_end(year, month)
+        start = (qend - timedelta(days=380)).isoformat()
+        end = (qend + timedelta(days=1)).isoformat()
+        stock_hist = ticker_obj.history(start=start, end=end, auto_adjust=True)
+        gspc_hist = yf.Ticker("^GSPC").history(start=start, end=end, auto_adjust=True)
+        if stock_hist.empty or gspc_hist.empty:
+            return None
+        s_ret = stock_hist["Close"].pct_change().dropna()
+        m_ret = gspc_hist["Close"].pct_change().dropna()
+        common = s_ret.index.intersection(m_ret.index)
+        if len(common) < 50:
+            return None
+        s_ret = s_ret.loc[common]
+        m_ret = m_ret.loc[common]
+        var_m = float(m_ret.var())
+        if var_m == 0.0:
+            return None
+        return round(float(s_ret.cov(m_ret)) / var_m, 4)
+    except Exception:
+        return None
+
+
 def get_quarterly_metrics(
     ticker: str, year: int, month: int
 ) -> Dict[str, Any]:
@@ -306,6 +455,13 @@ def get_quarterly_metrics(
 
 
 def get_financial_metrics(ticker: str, year: int, month: int) -> Dict[str, Any]:
+    """
+    Return financial metrics for `ticker` as of the quarter whose last month is `month`
+    (e.g. month=9 → Q3 ending Sep 30).  All price-based metrics (P/E, P/B, market cap,
+    yield, beta) are computed from historical data at the quarter-end date rather than
+    today's snapshot.  forwardPE and pegRatio come from yf.info (analyst estimates —
+    no historical equivalent exists without a paid data source).
+    """
     load_dotenv()
 
     if not ticker or not isinstance(ticker, str):
@@ -320,98 +476,127 @@ def get_financial_metrics(ticker: str, year: int, month: int) -> Dict[str, Any]:
     if not info:
         return {"error": f"ticker not found: {ticker}"}
 
-    start = _month_start(year, month)
+    start = _month_start(year, month)          # first day of target month
+    shares = _safe_get(info, "sharesOutstanding")
 
-    metrics: Dict[str, Any] = {
-        "trailingPE": _safe_get(info, "trailingPE"),
-        "forwardPE": _safe_get(info, "forwardPE"),
-        "pegRatio": _safe_get(info, "pegRatio"),
-        "freeCashflow": None,
-        "operatingCashflow": None,
-        "capitalExpenditures": None,
-        "totalRevenue": None,
-        "dividendRate": _safe_get(info, "dividendRate"),
-        "dividendYield": _safe_get(info, "dividendYield"),
-        "priceToBook": _safe_get(info, "priceToBook"),
-        "enterpriseToEbitda": _safe_get(info, "enterpriseToEbitda"),
-        "returnOnEquity": None,
-        "debtToEquity": None,
-        "marketCap": _safe_get(info, "marketCap"),
-        "totalCash": None,
-        "totalDebt": None,
-        "currentRatio": None,
-        "quickRatio": None,
-        "profitMargins": None,
-        "grossMargins": None,
-        "operatingMargins": None,
-        "ebitdaMargins": _safe_get(info, "ebitdaMargins"),
-        "revenueGrowth": None,
-        "earningsGrowth": None,
-        "returnOnAssets": None,
-        "payoutRatio": _safe_get(info, "payoutRatio"),
-        "beta": _safe_get(info, "beta"),
-    }
+    # ── Quarterly financial statements ──────────────────────────────
+    income_df   = _get_quarterly_df(yf_ticker, "income")
+    cashflow_df = _get_quarterly_df(yf_ticker, "cashflow")
+    balance_df  = _get_quarterly_df(yf_ticker, "balance")
 
-    # Fallbacks from cashflow statement if missing
-    # Use quarterly statements closest to target month
-    income_q = _nearest_period_row(yf_ticker.quarterly_financials, start)
-    cashflow_q = _nearest_period_row(yf_ticker.quarterly_cashflow, start)
-    balance_q = _nearest_period_row(yf_ticker.quarterly_balance_sheet, start)
+    income_col   = _closest_col(income_df,   start)
+    cashflow_col = _closest_col(cashflow_df, start)
+    balance_col  = _closest_col(balance_df,  start)
 
-    if income_q:
-        metrics["totalRevenue"] = _sanitize_value(income_q.get("Total Revenue"))
-        revenue = _sanitize_value(income_q.get("Total Revenue"))
-        gross_profit = _sanitize_value(income_q.get("Gross Profit"))
-        operating_income = _sanitize_value(income_q.get("Operating Income"))
-        net_income = _sanitize_value(income_q.get("Net Income"))
-        if revenue:
-            if gross_profit is not None:
-                metrics["grossMargins"] = gross_profit / revenue
-            if operating_income is not None:
-                metrics["operatingMargins"] = operating_income / revenue
-            if net_income is not None:
-                metrics["profitMargins"] = net_income / revenue
+    income_q   = _series_to_dict(income_df,   income_col)   or {}
+    cashflow_q = _series_to_dict(cashflow_df, cashflow_col) or {}
+    balance_q  = _series_to_dict(balance_df,  balance_col)  or {}
 
-    if cashflow_q:
-        metrics["operatingCashflow"] = _sanitize_value(cashflow_q.get("Operating Cash Flow"))
-        metrics["capitalExpenditures"] = _sanitize_value(cashflow_q.get("Capital Expenditure"))
-        metrics["freeCashflow"] = _sanitize_value(cashflow_q.get("Free Cash Flow"))
+    metrics: Dict[str, Any] = {}
 
-    if balance_q:
-        total_assets = _sanitize_value(balance_q.get("Total Assets"))
-        total_equity = _sanitize_value(balance_q.get("Total Stockholder Equity"))
-        total_debt = _sanitize_value(balance_q.get("Total Debt")) or _sanitize_value(
-            balance_q.get("Long Term Debt")
-        )
-        total_cash = _sanitize_value(balance_q.get("Cash And Cash Equivalents"))
-        current_assets = _sanitize_value(balance_q.get("Total Current Assets"))
-        current_liab = _sanitize_value(balance_q.get("Total Current Liabilities"))
-        inventory = _sanitize_value(balance_q.get("Inventory"))
-        net_income = None
-        if income_q:
-            net_income = income_q.get("Net Income")
+    # ── Income-statement metrics ─────────────────────────────────────
+    revenue        = _sanitize_value(income_q.get("Total Revenue"))
+    gross_profit   = _sanitize_value(income_q.get("Gross Profit"))
+    op_income      = _sanitize_value(income_q.get("Operating Income"))
+    net_income     = _sanitize_value(income_q.get("Net Income"))
 
-        metrics["totalCash"] = total_cash
-        metrics["totalDebt"] = total_debt
-        if total_assets and net_income is not None:
-            metrics["returnOnAssets"] = net_income / total_assets
-        if total_equity and net_income is not None:
-            metrics["returnOnEquity"] = net_income / total_equity
-        if total_equity and total_debt is not None:
-            metrics["debtToEquity"] = total_debt / total_equity
-        if current_assets and current_liab:
-            metrics["currentRatio"] = current_assets / current_liab
-            quick_assets = current_assets - (inventory or 0)
-            metrics["quickRatio"] = quick_assets / current_liab
+    metrics["totalRevenue"] = revenue
+    if revenue:
+        if gross_profit  is not None: metrics["grossMargins"]     = gross_profit  / revenue
+        if op_income     is not None: metrics["operatingMargins"] = op_income     / revenue
+        if net_income    is not None: metrics["profitMargins"]    = net_income    / revenue
 
-    if metrics["operatingCashflow"] is not None and metrics["capitalExpenditures"] is not None:
+    # EBITDA margin — computed from quarterly statement, not .info snapshot
+    metrics["ebitdaMargins"] = _compute_ebitda_margin_df(income_df, income_col)
+
+    # YoY growth — current quarter vs same quarter one year prior
+    metrics["revenueGrowth"]  = _compute_yoy_growth_df(income_df, income_col, "Total Revenue")
+    metrics["earningsGrowth"] = _compute_yoy_growth_df(income_df, income_col, "Net Income")
+
+    # ── Cash-flow metrics ────────────────────────────────────────────
+    metrics["operatingCashflow"]   = _sanitize_value(cashflow_q.get("Operating Cash Flow"))
+    metrics["capitalExpenditures"] = _sanitize_value(cashflow_q.get("Capital Expenditure"))
+    metrics["freeCashflow"]        = _sanitize_value(cashflow_q.get("Free Cash Flow"))
+    if metrics.get("operatingCashflow") is not None and metrics.get("capitalExpenditures") is not None:
         metrics["fcf_change"] = metrics["operatingCashflow"] - metrics["capitalExpenditures"]
-    else:
-        metrics["fcf_change"] = None
 
+    # ── Balance-sheet metrics ────────────────────────────────────────
+    total_assets   = _sanitize_value(balance_q.get("Total Assets"))
+    total_equity   = _sanitize_value(balance_q.get("Total Stockholder Equity"))
+    total_debt     = _sanitize_value(balance_q.get("Total Debt")) or _sanitize_value(balance_q.get("Long Term Debt"))
+    total_cash     = _sanitize_value(balance_q.get("Cash And Cash Equivalents"))
+    current_assets = _sanitize_value(balance_q.get("Total Current Assets"))
+    current_liab   = _sanitize_value(balance_q.get("Total Current Liabilities"))
+    inventory      = _sanitize_value(balance_q.get("Inventory"))
+
+    metrics["totalCash"] = total_cash
+    metrics["totalDebt"] = total_debt
+
+    if total_assets and net_income is not None:
+        metrics["returnOnAssets"] = net_income / total_assets
+    if total_equity and net_income is not None:
+        metrics["returnOnEquity"] = net_income / total_equity
+    if total_equity and total_debt is not None:
+        metrics["debtToEquity"] = total_debt / total_equity
+    if current_assets and current_liab:
+        metrics["currentRatio"] = current_assets / current_liab
+        metrics["quickRatio"]   = (current_assets - (inventory or 0)) / current_liab
+
+    # ── Price-based metrics at quarter end ───────────────────────────
+    qend_price = _get_quarter_end_price(yf_ticker, year, month)
+
+    if qend_price and shares:
+        metrics["marketCap"] = qend_price * shares
+
+        # Trailing P/E from TTM earnings
+        ttm_eps = _compute_ttm_eps(income_df, income_col, shares)
+        if ttm_eps and ttm_eps != 0.0:
+            metrics["trailingPE"] = qend_price / ttm_eps
+
+        # Price / Book from quarter-end balance sheet
+        if total_equity:
+            book_per_share = total_equity / shares
+            if book_per_share != 0.0:
+                metrics["priceToBook"] = qend_price / book_per_share
+
+    # Beta — 1-year rolling vs S&P 500 ending at quarter end
+    beta = _compute_beta_at_quarter(yf_ticker, year, month)
+    metrics["beta"] = beta if beta is not None else _safe_get(info, "beta")
+
+    # ── Dividend metrics ─────────────────────────────────────────────
+    metrics["dividendRate"]   = _safe_get(info, "dividendRate")
+    metrics["payoutRatio"]    = _safe_get(info, "payoutRatio")
     metrics["dividend_change"] = _dividend_change(yf_ticker, start)
 
-    # FMP removed per request; yfinance-only metrics.
+    # Dividend yield at quarter end (annual TTM dividends / quarter-end price)
+    if qend_price:
+        try:
+            divs = yf_ticker.dividends
+            if divs is not None and not getattr(divs, "empty", False):
+                qend_date = _quarter_end(year, month)
+                one_yr_ago = qend_date - timedelta(days=365)
+                recent = divs[
+                    (divs.index.normalize().date >= one_yr_ago)
+                    & (divs.index.normalize().date <= qend_date)
+                ]
+                annual_div = float(recent.sum())
+                if annual_div > 0:
+                    metrics["dividendYield"] = annual_div / qend_price
+        except Exception:
+            pass
+
+    # ── EV / EBITDA — computed from quarter-end components ──────────
+    # EV ≈ (quarter-end price × shares) + total debt − total cash
+    # Annualised EBITDA ≈ quarterly EBITDA × 4
+    if qend_price and shares:
+        ev = qend_price * shares
+        if total_debt  is not None: ev += total_debt
+        if total_cash  is not None: ev -= total_cash
+        ebitda_margin = metrics.get("ebitdaMargins")
+        if ebitda_margin is not None and revenue:
+            ann_ebitda = ebitda_margin * revenue * 4
+            if ann_ebitda != 0.0:
+                metrics["enterpriseToEbitda"] = ev / ann_ebitda
 
     return _drop_null_fields(metrics)
 

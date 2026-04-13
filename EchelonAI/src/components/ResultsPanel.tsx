@@ -15,37 +15,12 @@ function quarterLabel(quarter: number, year: number) {
   return `Q${quarter} ${year}`;
 }
 
-function toConciseSentences(text: string, maxSentences: number): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  const sentences = normalized.split(/(?<=[.!?])\s+/).filter(Boolean);
-  return sentences.slice(0, maxSentences).join(" ");
-}
-
-function splitInsight(text: string): { insight: string; why: string } {
-  const marker = "Why it matters:";
-  const idx = text.indexOf(marker);
-  if (idx === -1) {
-    return { insight: toConciseSentences(text, 1), why: "" };
-  }
-  const insight = text.slice(0, idx).trim();
-  const why = text.slice(idx + marker.length).trim();
-  return {
-    insight: toConcSentencesSafe(insight, 1),
-    why: toConcSentencesSafe(why, 2),
-  };
-}
-
-function toConcSentencesSafe(text: string, maxSentences: number): string {
-  const concise = toConciseSentences(text, maxSentences);
-  return concise || text.trim();
-}
 
 function AlphaSynthesis({ result }: { result: AnalysisResult }) {
   if (result.dataErrors?.synthesis) {
     return (
       <div className="panel-box fade-up fade-up-4">
-        <div className="panel-label">Alpha Synthesis</div>
+        <div className="panel-label">Echelon Synthesis</div>
         <div style={{
           padding: 14,
           border: "1px solid var(--red)",
@@ -60,27 +35,35 @@ function AlphaSynthesis({ result }: { result: AnalysisResult }) {
     );
   }
 
-  const catColor: Record<string, string> = {
-    cultural:  "var(--purple)",
-    financial: "var(--green)",
-    filing:    "var(--accent)",
-  };
-  const catBg: Record<string, string> = {
-    cultural: "rgba(119,110,255,0.08)",
-    financial: "rgba(61,220,132,0.08)",
-    filing: "rgba(245,166,35,0.08)",
-  };
+  function bulletColor(category: string, direction?: string): string {
+    if (category === "cultural") return direction === "neg" ? "#fca5a5" : "#86efac";
+    if (category === "financial") return direction === "neg" ? "#ff4c4c" : "#3ddc84";
+    return "var(--accent)";
+  }
+  function bulletBg(category: string, direction?: string): string {
+    if (category === "cultural") return direction === "neg" ? "rgba(252,165,165,0.08)" : "rgba(134,239,172,0.08)";
+    if (category === "financial") return direction === "neg" ? "rgba(255,76,76,0.08)" : "rgba(61,220,132,0.08)";
+    return "rgba(245,166,35,0.08)";
+  }
+  function bulletLabel(category: string, direction?: string): string {
+    if (category === "cultural") return direction === "neg" ? "cultural · negative" : "cultural · positive";
+    if (category === "financial") return direction === "neg" ? "financial · negative" : "financial · positive";
+    return category;
+  }
   const allReasoning = result.reasoning;
   return (
     <div className="panel-box fade-up fade-up-4">
-      <div className="panel-label">Alpha Synthesis</div>
-      {/* Italic serif intro */}
-      <p className="font-display" style={{
-        fontStyle: "italic", fontSize: 18, lineHeight: 1.65, color: "var(--text)",
-        borderLeft: "2px solid var(--accent)", paddingLeft: 20, marginBottom: 24,
+      <div className="panel-label">Echelon Synthesis</div>
+      <div style={{
+        borderLeft: "2px solid var(--accent)", paddingLeft: 16, marginBottom: 24,
+        display: "flex", flexDirection: "column", gap: 12,
       }}>
-        {result.summary}
-      </p>
+        {result.summary.split("\n\n").map((para, i) => (
+          <p key={i} style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text)", margin: 0 }}>
+            {para}
+          </p>
+        ))}
+      </div>
       <details style={{ marginTop: 6 }}>
         <summary style={{
           cursor: "pointer",
@@ -94,35 +77,33 @@ function AlphaSynthesis({ result }: { result: AnalysisResult }) {
         </summary>
         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
           {allReasoning.map((pt, i) => {
-            const parts = splitInsight(pt.text);
             return (
               <div
                 key={i}
                 style={{
-                  border: `1px solid ${catColor[pt.category] ?? "var(--border)"}`,
-                  background: catBg[pt.category] ?? "rgba(255,255,255,0.03)",
+                  border: `1px solid ${bulletColor(pt.category, pt.direction)}`,
+                  background: bulletBg(pt.category, pt.direction),
                   padding: "10px 12px",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ color: catColor[pt.category] ?? "var(--accent)", fontSize: 13 }}>▸</span>
-                  <span style={{
-                    fontSize: 9,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: catColor[pt.category] ?? "var(--accent)",
-                  }}>
-                    {pt.category}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, lineHeight: 1.6, color: "#d2d0c8" }}>
-                  <strong style={{ color: "var(--text)" }}>Insight:</strong> {parts.insight}
-                </div>
-                {parts.why && (
-                  <div style={{ fontSize: 12, lineHeight: 1.6, color: "#b7b4ab", marginTop: 4 }}>
-                    <strong style={{ color: "#d8d5cc" }}>Why it matters:</strong> {parts.why}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <span style={{ color: bulletColor(pt.category, pt.direction), fontSize: 11, marginTop: 2, flexShrink: 0 }}>▸</span>
+                  <div style={{ flex: 1 }}>
+                    <span style={{
+                      fontSize: 8,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      color: bulletColor(pt.category, pt.direction),
+                      display: "block",
+                      marginBottom: 4,
+                    }}>
+                      {bulletLabel(pt.category, pt.direction)}
+                    </span>
+                    <p style={{ fontSize: 12, lineHeight: 1.65, color: "#d2d0c8", margin: 0 }}>
+                      {pt.text}
+                    </p>
                   </div>
-                )}
+                </div>
               </div>
             );
           })}

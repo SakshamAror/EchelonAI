@@ -93,8 +93,6 @@ def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
 def normalize_metrics(raw: Dict[str, Any]) -> Dict[str, Optional[float]]:
     keep_keys = [
         "trailingPE",
-        "forwardPE",
-        "pegRatio",
         "enterpriseToEbitda",
         "returnOnEquity",
         "debtToEquity",
@@ -268,7 +266,6 @@ def compute_financial_score(metrics: Dict[str, Optional[float]]) -> float:
     add(metrics.get("profitMargins"), lambda v: clamp(v * 45.0, -8.0, 8.0))
     add(metrics.get("debtToEquity"), lambda v: clamp((1.6 - v) * 6.0, -10.0, 8.0))
     add(metrics.get("trailingPE"), lambda v: clamp((28.0 - v) * 0.7, -8.0, 6.0))
-    add(metrics.get("pegRatio"), lambda v: clamp((2.2 - v) * 5.0, -8.0, 6.0))
     add(metrics.get("currentRatio"), lambda v: clamp((v - 1.0) * 6.0, -6.0, 6.0))
 
     if contributors == 0:
