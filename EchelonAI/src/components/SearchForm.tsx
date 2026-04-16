@@ -273,7 +273,7 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
                 left: 0,
                 right: 0,
                 zIndex: 120,
-                background: "#101010",
+                background: "var(--surface-2)",
                 border: "1px solid var(--border)",
                 maxHeight: 280,
                 overflowY: "auto",

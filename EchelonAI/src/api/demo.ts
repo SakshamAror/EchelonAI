@@ -1,7 +1,7 @@
 // READ instructions.txt before editing this file.
 // Hardcoded demo fixtures. Demo companies: Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023
 
-import type { AnalysisRequest, AnalysisResult, FinancialMetrics, ReasoningPoint, TimeFrame } from "@/types";
+import type { AnalysisRequest, AnalysisResult, FinancialMetrics, ReasoningPoint, SecFiling, TimeFrame } from "@/types";
 
 export const DEMO_RESULTS: Record<string, AnalysisResult> = {
   // ─── NIKE Q3 2024 ─────────────────────────────────────────────────────────
@@ -200,10 +200,19 @@ interface AgentDataResponse {
   priceChart?: AnalysisResult["forumChart"] | null;
   priceDeltaPercent?: number;
   sources?: AnalysisResult["sources"];
+  secFiling?: {
+    filingUrl?: string;
+    documentUrl?: string;
+    filingDate?: string;
+    periodOfReport?: string;
+    companyName?: string;
+    highlights?: string[];
+  } | null;
   errors?: {
     financial?: string;
     cultural?: string;
     priceChart?: string;
+    secFiling?: string;
   };
 }
 
@@ -851,11 +860,22 @@ async function buildLiveResultFromBase(
                 date: s.date,
                 type: "web" as const,
               })),
+      secFiling: payload.secFiling
+        ? {
+            filingUrl: payload.secFiling.filingUrl ?? "",
+            documentUrl: payload.secFiling.documentUrl ?? "",
+            filingDate: payload.secFiling.filingDate ?? "",
+            periodOfReport: payload.secFiling.periodOfReport ?? "",
+            companyName: payload.secFiling.companyName ?? "",
+            highlights: Array.isArray(payload.secFiling.highlights) ? payload.secFiling.highlights : [],
+          } as SecFiling
+        : null,
       dataErrors: {
         financial: payload.errors?.financial,
         cultural: payload.errors?.cultural,
         forumChart: payload.errors?.priceChart ?? (livePriceChart ? undefined : "Stock price chart is unavailable for this ticker/quarter."),
         sources: payload.sources && payload.sources.length > 0 ? undefined : "No source links returned by the search agent.",
+        secFiling: payload.errors?.secFiling,
       },
     };
 

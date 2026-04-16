@@ -99,7 +99,7 @@ export default function SettingsOverlay({ open, onClose, onSaved }: Props) {
   if (!open) return null;
 
   const inputStyle: React.CSSProperties = {
-    background: "#0a0a0a",
+    background: "var(--bg)",
     border: "1px solid var(--border)",
     color: "var(--text)",
     fontFamily: "'DM Mono', monospace",

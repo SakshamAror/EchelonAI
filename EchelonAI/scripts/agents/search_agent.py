@@ -8,7 +8,8 @@ import calendar
 import os
 import json
 import re
-from typing import Dict, List
+from datetime import date, datetime
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -113,6 +114,26 @@ def _month_name(month: int) -> str:
     if not 1 <= month <= 12:
         raise ValueError("month must be in 1..12")
     return calendar.month_name[month]
+
+
+def _parse_article_date(date_str: str) -> Optional[date]:
+    """Try common ISO-like formats; return None if unparseable."""
+    if not date_str:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(date_str[:len(fmt) + 2].strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _in_month(date_str: str, year: int, month: int) -> bool:
+    """Return True if date_str falls within year/month, or if date is unparseable (give benefit of doubt)."""
+    d = _parse_article_date(date_str)
+    if d is None:
+        return True  # can't confirm → keep
+    return d.year == year and d.month == month
 
 
 def _domain_from_url(url: str) -> str:
@@ -320,6 +341,9 @@ def search_cultural_events(term: str, year: int, month: int) -> List[Dict[str, o
         raise ValueError("year must be an int")
 
     month_name = _month_name(month)
+    last_day = calendar.monthrange(year, month)[1]
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{last_day:02d}"
 
     load_dotenv()
     api_key = os.getenv("TAVILY_API_KEY")
@@ -337,6 +361,8 @@ def search_cultural_events(term: str, year: int, month: int) -> List[Dict[str, o
         search_depth="basic",
         max_results=10,
         include_raw_content=False,
+        start_published_date=start_date,
+        end_published_date=end_date,
     )
 
     results = response.get("results", []) if isinstance(response, dict) else []
@@ -367,6 +393,9 @@ def search_cultural_events(term: str, year: int, month: int) -> List[Dict[str, o
                 "published_date": published_date,
             }
         )
+
+    # Hard date filter — drop articles with a parseable date outside this month
+    articles = [a for a in articles if _in_month(str(a.get("published_date", "")), year, month)]
 
     # Filter to reputable domains only; fall back to all if < 2 reputable found
     reputable = [a for a in articles if _domain_from_url(str(a.get("url", ""))) in REPUTABLE_DOMAINS]

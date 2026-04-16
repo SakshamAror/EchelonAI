@@ -25,9 +25,11 @@ if str(AGENTS_DIR) not in sys.path:
 
 FINANCIAL_IMPORT_ERROR: Optional[str] = None
 SEARCH_IMPORT_ERROR: Optional[str] = None
+SEC_IMPORT_ERROR: Optional[str] = None
 get_financial_metrics = None
 search_cultural_events = None
 compute_social_score = None
+find_10q_filing = None
 
 try:
     from financial_agent import get_financial_metrics as _get_financial_metrics  # type: ignore  # noqa: E402
@@ -48,6 +50,13 @@ try:
     search_cultural_events = _search_cultural_events
 except Exception as exc:  # pragma: no cover - runtime environment dependent
     SEARCH_IMPORT_ERROR = str(exc)
+
+try:
+    from sec_agent import find_10q_filing as _find_10q_filing  # type: ignore  # noqa: E402
+
+    find_10q_filing = _find_10q_filing
+except Exception as exc:  # pragma: no cover - runtime environment dependent
+    SEC_IMPORT_ERROR = str(exc)
 
 
 def parse_args() -> argparse.Namespace:
@@ -352,6 +361,27 @@ def main() -> None:
         cultural_score = round(compute_social_score(deduped_articles), 2) if deduped_articles else 50.0
     cultural_signals = [map_signal(a) for a in deduped_articles]
 
+    # SEC EDGAR 10-Q filing
+    sec_filing: Optional[Dict[str, Any]] = None
+    if find_10q_filing is None:
+        errors["secFiling"] = f"sec_agent import failed: {SEC_IMPORT_ERROR or 'unknown error'}"
+    else:
+        try:
+            raw_sec = find_10q_filing(ticker, year, quarter)
+            if isinstance(raw_sec, dict) and raw_sec.get("error"):
+                errors["secFiling"] = str(raw_sec["error"])
+            elif isinstance(raw_sec, dict):
+                sec_filing = {
+                    "filingUrl": raw_sec.get("filing_url", ""),
+                    "documentUrl": raw_sec.get("document_url", ""),
+                    "filingDate": raw_sec.get("filing_date", ""),
+                    "periodOfReport": raw_sec.get("period_of_report", ""),
+                    "companyName": raw_sec.get("company_name", ""),
+                    "highlights": raw_sec.get("highlights", []),
+                }
+        except Exception as exc:
+            errors["secFiling"] = f"SEC fetch failed: {exc}"
+
     price_chart, price_error, delta_price = build_price_chart(ticker, year, quarter)
     if price_error:
         errors["priceChart"] = price_error
@@ -374,6 +404,7 @@ def main() -> None:
         },
         "priceChart": price_chart,
         "priceDeltaPercent": delta_price,
+        "secFiling": sec_filing,
         "sources": build_sources(cultural_signals, ticker),
         "errors": errors,
     }

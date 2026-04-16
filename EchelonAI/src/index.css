@@ -32,6 +32,42 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* ── Light mode overrides ───────────────────────────────────── */
+  [data-theme="light"] {
+    --bg:        #eeebd3;
+    --surface:   #e4e1c8;
+    --surface-2: #d8d5bc;
+    --border:    #b8b49a;
+    --border-2:  #a09c84;
+    --text:      #141310;
+    --text-muted:#44423a;
+    --text-dim:  #706e62;
+    --accent:    #a86400;
+    --accent-dim:#7a4800;
+    --green:     #1e7a3e;
+    --red:       #c0282a;
+  }
+
+  [data-theme="light"] body {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  /* Disable scanlines and scrolling bar in light mode */
+  [data-theme="light"] body::before,
+  [data-theme="light"] body::after {
+    display: none;
+  }
+
+  /* Panel box gets a subtle top shadow instead of white glow */
+  [data-theme="light"] .panel-box {
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  }
+
+  /* Scrollbar in light mode */
+  [data-theme="light"] ::-webkit-scrollbar-track { background: var(--surface); }
+  [data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--border-2); }
+
   /* Scanline overlay */
   body::before {
     content: '';
@@ -181,6 +217,7 @@
   .fade-up-2 { animation-delay: 0.15s; }
   .fade-up-3 { animation-delay: 0.25s; }
   .fade-up-4 { animation-delay: 0.35s; }
+  .fade-up-5 { animation-delay: 0.45s; }
 
   @keyframes blink {
     0%, 100% { opacity: 1; }

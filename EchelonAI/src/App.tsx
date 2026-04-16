@@ -2,7 +2,7 @@
 // App.tsx — root layout + state only. No business logic. Add sections in components/.
 
 import { useEffect, useRef, useState } from "react";
-import { Settings } from "lucide-react";
+import { Moon, Settings, Sun } from "lucide-react";
 import SearchForm, { periodLabel } from "@/components/SearchForm";
 import AgentProgress from "@/components/AgentProgress";
 import ResultsPanel from "@/components/ResultsPanel";
@@ -49,9 +49,17 @@ export default function App() {
   const [lastReq,       setLastReq]       = useState<AnalysisRequest | null>(null);
   const [settingsOpen,  setSettingsOpen]  = useState(false);
   const [keysReady,     setKeysReady]     = useState(() => hasStoredKeys());
+  const [lightMode,     setLightMode]     = useState(() => localStorage.getItem("echelon_theme") === "light");
 
   // On mount: sync any stored keys to the Vite dev server's .env
   useEffect(() => { syncKeysToServer(); }, []);
+
+  // Apply theme to <html> element so CSS variables cascade everywhere
+  useEffect(() => {
+    const theme = lightMode ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("echelon_theme", theme);
+  }, [lightMode]);
 
   useEffect(() => {
     if (!result && !error) return;
@@ -164,7 +172,8 @@ export default function App() {
       <nav style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "18px 40px", borderBottom: "1px solid var(--border)",
-        position: "sticky", top: 0, background: "rgba(10,10,10,0.95)",
+        position: "sticky", top: 0,
+        background: lightMode ? "rgba(245,244,239,0.95)" : "rgba(10,10,10,0.95)",
         backdropFilter: "blur(10px)", zIndex: 100,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -183,6 +192,22 @@ export default function App() {
           <span style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--text-muted)" }}>
             Not Financial Advice
           </span>
+          {/* Theme toggle */}
+          <button
+            onClick={() => setLightMode(m => !m)}
+            title={lightMode ? "Switch to dark mode" : "Switch to light mode"}
+            style={{
+              background: "none", border: "1px solid var(--border)", cursor: "pointer",
+              color: "var(--text-muted)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 32, height: 32, transition: "all 0.15s", flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent-dim)"; e.currentTarget.style.color = "var(--accent)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+          >
+            {lightMode ? <Moon size={14} /> : <Sun size={14} />}
+          </button>
+          {/* Settings */}
           <button
             onClick={() => setSettingsOpen(true)}
             title="Settings"

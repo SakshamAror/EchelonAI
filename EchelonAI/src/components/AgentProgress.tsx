@@ -30,7 +30,7 @@ export default function AgentProgress({ active, steps, company, periodLabel }: P
   return (
     <div style={{
       position: "fixed", inset: 0,
-      background: "rgba(10,10,10,0.93)",
+      background: "color-mix(in srgb, var(--bg) 93%, transparent)",
       zIndex: 200,
       display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column",
       gap: 20,

@@ -7,6 +7,7 @@ import ScoreCard from "./ScoreCard";
 import ForumChart from "./ForumChart";
 import CulturalSignals from "./CulturalSignals";
 import MetricsPanel from "./MetricsPanel";
+import SecFilingPanel from "./SecFilingPanel";
 import SourcesList from "./SourcesList";
 
 interface Props { result: AnalysisResult }
@@ -99,7 +100,7 @@ function AlphaSynthesis({ result }: { result: AnalysisResult }) {
                     }}>
                       {bulletLabel(pt.category, pt.direction)}
                     </span>
-                    <p style={{ fontSize: 12, lineHeight: 1.65, color: "#d2d0c8", margin: 0 }}>
+                    <p style={{ fontSize: 12, lineHeight: 1.65, color: "var(--text)", margin: 0 }}>
                       {pt.text}
                     </p>
                   </div>
@@ -136,6 +137,12 @@ export default function ResultsPanel({ result }: Props) {
       </div>
       <MetricsPanel metrics={result.metrics} periodLabel={periodLabel} error={result.dataErrors?.financial} />
       <AlphaSynthesis result={result} />
+      <SecFilingPanel
+        filing={result.secFiling}
+        error={result.dataErrors?.secFiling}
+        quarter={result.timeframe.quarter}
+        year={result.timeframe.year}
+      />
       <SourcesList sources={result.sources} error={result.dataErrors?.sources} />
     </div>
   );

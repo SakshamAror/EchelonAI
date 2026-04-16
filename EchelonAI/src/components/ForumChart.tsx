@@ -154,7 +154,7 @@ export default function ForumChart({ data, error }: Props) {
           {labels.slice(0, 3).map((lbl, i) => (
             <span key={`${lbl}-${i}`} style={{
               fontSize: 10,
-              color: "#555550",
+              color: "var(--text-dim)",
               fontFamily: "'DM Mono', monospace",
             }}>
               {lbl}

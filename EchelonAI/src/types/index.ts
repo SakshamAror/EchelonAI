@@ -86,6 +86,15 @@ export interface Source {
   type: "news" | "filing" | "forum" | "web";
 }
 
+export interface SecFiling {
+  filingUrl: string;
+  documentUrl: string;
+  filingDate: string;          // YYYY-MM-DD
+  periodOfReport: string;      // YYYY-MM-DD (fiscal period end)
+  companyName: string;
+  highlights: string[];        // up to 3 MD&A sentences
+}
+
 export interface ReasoningPoint {
   text: string;
   category: "cultural" | "financial" | "filing";
@@ -108,6 +117,7 @@ export interface AnalysisResult {
   reasoning: ReasoningPoint[];
   summary: string;
   sources: Source[];
+  secFiling?: SecFiling | null;
   dataErrors?: {
     scorecard?: string;
     forumChart?: string;
@@ -115,6 +125,7 @@ export interface AnalysisResult {
     cultural?: string;
     synthesis?: string;
     sources?: string;
+    secFiling?: string;
   };
 }
 
