@@ -5,10 +5,10 @@
 @layer base {
   :root {
     --bg:        #0a0a0a;
-    --surface:   #121315;
-    --surface-2: #17191d;
-    --border:    #2a2d33;
-    --border-2:  #363a42;
+    --surface:   #1a1d22;
+    --surface-2: #21252c;
+    --border:    #32363f;
+    --border-2:  #42474f;
     --text:      #f2f3ef;
     --text-muted:#b0b2ad;
     --text-dim:  #7f837b;
@@ -17,6 +17,19 @@
     --green:     #3ddc84;
     --red:       #ff4c4c;
     --purple:    #7c6ef5;
+
+    /* Cultural signal sentiment colors */
+    --signal-pos-title:  #9ee8be;
+    --signal-pos-body:   #7ec9a4;
+    --signal-pos-border: rgba(61,220,132,0.35);
+    --signal-neg-title:  #f5a0a0;
+    --signal-neg-body:   #d88080;
+    --signal-neg-border: rgba(255,76,76,0.35);
+    --signal-neu-dot:    #c8a84b;
+    --signal-neu-title:  #e0d09a;
+    --signal-neu-border: rgba(200,168,75,0.3);
+    --signal-item-bg:    rgba(255,255,255,0.02);
+
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -35,17 +48,30 @@
   /* ── Light mode overrides ───────────────────────────────────── */
   [data-theme="light"] {
     --bg:        #eeebd3;
-    --surface:   #e4e1c8;
-    --surface-2: #d8d5bc;
-    --border:    #b8b49a;
-    --border-2:  #a09c84;
+    --surface:   #dddab8;
+    --surface-2: #d0ccac;
+    --border:    #a4a07c;
+    --border-2:  #8e8a6a;
     --text:      #141310;
-    --text-muted:#44423a;
-    --text-dim:  #706e62;
+    --text-muted:#3a3830;
+    --text-dim:  #6a6858;
     --accent:    #a86400;
     --accent-dim:#7a4800;
     --green:     #1e7a3e;
     --red:       #c0282a;
+
+    /* Cultural signal sentiment colors — high contrast on warm beige */
+    --signal-pos-title:  #145c30;
+    --signal-pos-body:   #1e6638;
+    --signal-pos-border: rgba(20,100,50,0.35);
+    --signal-neg-title:  #8b1515;
+    --signal-neg-body:   #7a2020;
+    --signal-neg-border: rgba(160,25,25,0.35);
+    --signal-neu-dot:    #7a5200;
+    --signal-neu-title:  #5e3d00;
+    --signal-neu-border: rgba(120,80,0,0.3);
+    --signal-item-bg:    rgba(0,0,0,0.03);
+
   }
 
   [data-theme="light"] body {
@@ -53,15 +79,31 @@
     color: var(--text);
   }
 
-  /* Disable scanlines and scrolling bar in light mode */
-  [data-theme="light"] body::before,
-  [data-theme="light"] body::after {
+  /* Disable scanlines in light mode (bars stay on) */
+  [data-theme="light"] body::before {
     display: none;
   }
 
-  /* Panel box gets a subtle top shadow instead of white glow */
+  /* Light mode bar — warm sepia waterfall on beige (same 82px period) */
+  [data-theme="light"] body::after {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent              0px,
+      transparent              50px,
+      rgba(100,60,5,0.09)      50px,
+      rgba(100,60,5,0.09)      52px,
+      rgba(100,60,5,0.055)     52px,
+      rgba(100,60,5,0.030)     58px,
+      rgba(100,60,5,0.013)     65px,
+      rgba(100,60,5,0.005)     72px,
+      rgba(100,60,5,0.001)     78px,
+      transparent              82px
+    );
+  }
+
+  /* Panel box light mode */
   [data-theme="light"] .panel-box {
-    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.13);
   }
 
   /* Scrollbar in light mode */
@@ -77,26 +119,33 @@
       0deg,
       transparent,
       transparent 2px,
-      rgba(0,0,0,0.018) 2px,
-      rgba(0,0,0,0.018) 4px
+      rgba(0,0,0,0.028) 2px,
+      rgba(0,0,0,0.028) 4px
     );
     pointer-events: none;
     z-index: 9999;
   }
 
-  /* Moving horizontal bar background — subtle coder effect */
+  /* Moving horizontal bar background — waterfall glitch effect */
   body::after {
     content: '';
     position: fixed;
-    inset: -60px 0 0;
+    inset: 0;
     background: repeating-linear-gradient(
       0deg,
-      transparent 0px,
-      transparent 50px,
-      rgba(210, 150, 30, 0.032) 50px,
-      rgba(210, 150, 30, 0.032) 55px
+      transparent            0px,
+      transparent            50px,
+      rgba(210,145,20,0.10)  50px,   /* sharp 2px crest */
+      rgba(210,145,20,0.10)  52px,
+      rgba(210,145,20,0.068) 52px,   /* cascade top */
+      rgba(210,145,20,0.042) 58px,   /* mid-fall */
+      rgba(210,145,20,0.020) 65px,   /* thinning stream */
+      rgba(210,145,20,0.008) 72px,   /* long fade */
+      rgba(210,145,20,0.002) 78px,   /* near-transparent at base */
+      transparent            82px
     );
-    animation: barScroll 6s linear infinite;
+    background-position: 0 0;
+    animation: barScroll 10s linear infinite;
     pointer-events: none;
     z-index: 0;
   }
@@ -144,7 +193,7 @@
     width: fit-content;
     padding: 5px 10px;
     border: 1px solid var(--accent-dim);
-    background: rgba(245, 166, 35, 0.1);
+    background: rgba(245, 166, 35, 0.18);
   }
   .panel-label::after {
     content: '';
@@ -159,9 +208,14 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 24px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 2px 8px rgba(0,0,0,0.22);
     position: relative;
     z-index: 1;
+  }
+
+  /* Search input / select */
+  .search-field {
+    background: var(--surface);
   }
 
   .panel-box p,
@@ -231,8 +285,27 @@
   }
 
   @keyframes barScroll {
-    from { transform: translateY(0); }
-    to   { transform: translateY(55px); }
+    /* Scroll via background-position — 82px = one full gradient period → zero-jump loop */
+    /* Glitch uses translateX only; vertical position never jumps                        */
+    0%    { background-position: 0 0px;     transform: translateX(0);    opacity: 1; filter: none; }
+
+    /* ── Glitch 1 @ ~18% ── */
+    17%   { background-position: 0 13.9px;  transform: translateX(0);    opacity: 1; filter: none; }
+    18%   { background-position: 0 14.8px;  transform: translateX(4px);  opacity: 0.65; filter: brightness(1.8); }
+    19.5% { background-position: 0 16px;    transform: translateX(0);    opacity: 1; filter: none; }
+
+    /* ── Glitch 2 @ ~45% ── */
+    44%   { background-position: 0 36.1px;  transform: translateX(0);    opacity: 1; filter: none; }
+    45%   { background-position: 0 36.9px;  transform: translateX(-3px); opacity: 0.7; filter: brightness(2); }
+    46.5% { background-position: 0 38.1px;  transform: translateX(2px);  opacity: 0.85; filter: brightness(1.3); }
+    47.5% { background-position: 0 39px;    transform: translateX(0);    opacity: 1; filter: none; }
+
+    /* ── Glitch 3 @ ~79% ── */
+    78%   { background-position: 0 64px;    transform: translateX(0);    opacity: 1; filter: none; }
+    79%   { background-position: 0 64.8px;  transform: translateX(3px);  opacity: 0.6; filter: brightness(2.5); }
+    80.5% { background-position: 0 66px;    transform: translateX(0);    opacity: 1; filter: none; }
+
+    100%  { background-position: 0 82px;    transform: translateX(0);    opacity: 1; filter: none; }
   }
 
   @media (max-width: 980px) {

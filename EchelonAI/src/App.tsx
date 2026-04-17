@@ -166,14 +166,14 @@ export default function App() {
   const showProgressOverlay = overlayOn && loading;
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative", zIndex: 1 }}>
 
       {/* ── Nav ─────────────────────────────────────────────────── */}
       <nav style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "18px 40px", borderBottom: "1px solid var(--border)",
         position: "sticky", top: 0,
-        background: lightMode ? "rgba(245,244,239,0.95)" : "rgba(10,10,10,0.95)",
+        background: lightMode ? "rgba(238,235,211,0.97)" : "rgba(10,10,10,0.97)",
         backdropFilter: "blur(10px)", zIndex: 100,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -272,7 +272,7 @@ export default function App() {
       </section>
 
       <hr style={{ border: "none", borderTop: "1px solid var(--border)",
-        maxWidth: 1100, margin: "0 auto", width: "100%" }} />
+        maxWidth: 1480, margin: "0 auto", width: "100%" }} />
 
       {/* ── Results ─────────────────────────────────────────────── */}
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 40px 0", width: "100%", flex: 1 }}>

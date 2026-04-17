@@ -75,7 +75,6 @@ const DEMO_SUGGESTIONS = [
 ];
 
 const BASE: React.CSSProperties = {
-  background: "var(--surface)",
   border: "1px solid var(--border)",
   color: "var(--text)",
   fontFamily: "'DM Mono', monospace",
@@ -221,6 +220,7 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
       <div style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
         <div ref={searchBoxRef} style={{ flex: 2, position: "relative" }}>
           <input
+            className="search-field"
             style={{ ...BASE }}
             type="text"
             value={query}
@@ -329,6 +329,7 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
 
         <div style={{ flex: 1, position: "relative" }}>
           <select
+            className="search-field"
             style={{
               ...BASE,
               appearance: "none",

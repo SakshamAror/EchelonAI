@@ -10,20 +10,20 @@ interface Props { signals: CulturalSignal[]; error?: string }
 const SENTIMENT_STYLES: Record<string, { dot: string; border: string; titleColor: string; bodyColor: string }> = {
   pos: {
     dot:        "var(--green)",
-    border:     "rgba(61,220,132,0.35)",
-    titleColor: "#9ee8be",
-    bodyColor:  "#7ec9a4",
+    border:     "var(--signal-pos-border)",
+    titleColor: "var(--signal-pos-title)",
+    bodyColor:  "var(--signal-pos-body)",
   },
   neg: {
     dot:        "var(--red)",
-    border:     "rgba(255,76,76,0.35)",
-    titleColor: "#f5a0a0",
-    bodyColor:  "#d88080",
+    border:     "var(--signal-neg-border)",
+    titleColor: "var(--signal-neg-title)",
+    bodyColor:  "var(--signal-neg-body)",
   },
   neutral: {
-    dot:        "#c8a84b",
-    border:     "rgba(200,168,75,0.3)",
-    titleColor: "#e0d09a",
+    dot:        "var(--signal-neu-dot)",
+    border:     "var(--signal-neu-border)",
+    titleColor: "var(--signal-neu-title)",
     bodyColor:  "var(--text-muted)",
   },
 };
@@ -103,7 +103,7 @@ export default function CulturalSignals({ signals, error }: Props) {
                 alignItems: "flex-start",
                 padding: "10px 12px",
                 borderLeft: `3px solid ${style.border}`,
-                background: "rgba(255,255,255,0.02)",
+                background: "var(--signal-item-bg)",
               }}
             >
               <span style={{
