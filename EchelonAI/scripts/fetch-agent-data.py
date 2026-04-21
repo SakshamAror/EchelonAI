@@ -135,6 +135,16 @@ def normalize_metrics(raw: Dict[str, Any]) -> Dict[str, Optional[float]]:
     return out
 
 
+def _resample_to(src: List[float], n: int) -> List[float]:
+    """Resample a list to exactly n points using linear index interpolation."""
+    if len(src) == n:
+        return src[:]
+    if n == 1:
+        return [src[0]]
+    step = (len(src) - 1) / (n - 1)
+    return [src[min(len(src) - 1, int(round(i * step)))] for i in range(n)]
+
+
 def build_price_chart(ticker: str, year: int, quarter: int) -> Tuple[Optional[Dict[str, Any]], Optional[str], float]:
     if yf is None:
         return None, "yfinance is not installed in the Python environment used by the agent pipeline.", 0.0
@@ -173,7 +183,7 @@ def build_price_chart(ticker: str, year: int, quarter: int) -> Tuple[Optional[Di
             idx = int(round(i * step))
             sampled.append(closes[idx])
         deduped: List[Tuple[date, float]] = []
-        seen = set()
+        seen: set = set()
         for d, c in sampled:
             if d in seen:
                 continue
@@ -182,25 +192,58 @@ def build_price_chart(ticker: str, year: int, quarter: int) -> Tuple[Optional[Di
         closes = deduped
 
     values = [c for _, c in closes]
+    n = len(values)
+    stock_base = values[0]
     v_min = min(values)
     v_max = max(values)
-    if v_max == v_min:
-        points = [50.0 for _ in values]
-    else:
-        points = [((v - v_min) / (v_max - v_min)) * 100.0 for v in values]
+
+    # Performance-rebased normalization — both stock and S&P start at 50,
+    # diverge based on actual % returns using the same pixel scale.
+    stock_returns = [(v / stock_base - 1) * 100.0 for v in values]
+
+    # ── S&P 500 benchmark ────────────────────────────────────────────
+    benchmark_points: List[float] = []
+    benchmark_delta = 0.0
+    sp_returns: List[float] = []
+    try:
+        sp_hist = yf.Ticker("^GSPC").history(
+            start=start.isoformat(), end=end_plus.isoformat(), interval="1d", auto_adjust=False
+        )
+        if sp_hist is not None and not getattr(sp_hist, "empty", False):
+            sp_raw: List[float] = []
+            for idx, row in sp_hist.iterrows():
+                cv = to_float(row.get("Close"))
+                if cv is not None:
+                    sp_raw.append(cv)
+            if len(sp_raw) >= 2:
+                sp_resampled = _resample_to(sp_raw, n)
+                sp_base = sp_resampled[0]
+                sp_returns = [(v / sp_base - 1) * 100.0 for v in sp_resampled]
+                benchmark_delta = round(sp_returns[-1], 2)
+    except Exception:
+        pass  # benchmark failure is non-fatal
+
+    # Calibrate scale: largest absolute return across both series → 40 chart units
+    all_returns = stock_returns + sp_returns
+    max_abs = max((abs(r) for r in all_returns), default=1.0)
+    scale = 40.0 / max(max_abs, 0.5)
+    scale = min(scale, 10.0)  # cap to avoid over-amplification on flat periods
+
+    points = [round(max(5.0, min(95.0, 50.0 + r * scale)), 2) for r in stock_returns]
+    if sp_returns:
+        benchmark_points = [round(max(5.0, min(95.0, 50.0 + r * scale)), 2) for r in sp_returns]
 
     peak_index = max(range(len(values)), key=lambda i: values[i])
     start_price = values[0]
     end_price = values[-1]
     delta = ((end_price - start_price) / abs(start_price) * 100.0) if start_price != 0 else 0.0
-
     mid_index = (len(closes) - 1) // 2
 
     def label(d: date) -> str:
         return d.strftime("%b %d")
 
     chart = {
-        "points": [round(p, 2) for p in points],
+        "points": points,
         "labels": [label(closes[0][0]), label(closes[mid_index][0]), label(closes[-1][0])],
         "peakIndex": peak_index,
         "peakLabel": label(closes[peak_index][0]),
@@ -209,6 +252,8 @@ def build_price_chart(ticker: str, year: int, quarter: int) -> Tuple[Optional[Di
         "endPrice": round(end_price, 2),
         "highPrice": round(v_max, 2),
         "lowPrice": round(v_min, 2),
+        "benchmarkPoints": benchmark_points,
+        "benchmarkDelta": benchmark_delta,
     }
     return chart, None, float(delta)
 
@@ -347,7 +392,7 @@ def main() -> None:
     else:
         for month in quarter_months(quarter):
             try:
-                batch = search_cultural_events(company, year, month)
+                batch = search_cultural_events(company, year, month, ticker=ticker)
                 if isinstance(batch, list):
                     all_articles.extend(batch)
             except Exception as exc:

@@ -6,12 +6,15 @@ import { Moon, Settings, Sun } from "lucide-react";
 import SearchForm, { periodLabel } from "@/components/SearchForm";
 import AgentProgress from "@/components/AgentProgress";
 import ResultsPanel from "@/components/ResultsPanel";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import SettingsOverlay, { hasStoredKeys, syncKeysToServer } from "@/components/SettingsOverlay";
 import type { AnalysisRequest, AnalysisResult, AgentStep } from "@/types";
 import { getAnyStockResultWithLiveMetrics } from "@/api/demo";
 
-const USE_DEMO = true;
-const BYPASS_DEMO_AGENT_PROGRESS = false;
+// Set VITE_USE_DEMO=false in .env to enable live analysis mode
+const USE_DEMO = import.meta.env.VITE_USE_DEMO !== "false";
+// Set VITE_BYPASS_DEMO_PROGRESS=true to skip agent animation and show results immediately
+const BYPASS_DEMO_AGENT_PROGRESS = import.meta.env.VITE_BYPASS_DEMO_PROGRESS === "true";
 
 const DEFAULT_STEPS: AgentStep[] = [
   { id: "ticker",     label: "Resolving equity and market data",             status: "pending" },
@@ -180,16 +183,22 @@ export default function App() {
           <span className="font-bebas" style={{ fontSize: 28, letterSpacing: 4, color: "var(--accent)" }}>
             Echelon<span style={{ color: "var(--text)" }}>AI</span>
           </span>
-          <span style={{ fontSize: 10, letterSpacing: "0.2em", color: "var(--text-muted)" }}>
+          <span className="nav-subtitle" style={{ fontSize: 10, letterSpacing: "0.2em", color: "var(--text-muted)" }}>
             Cultural Signal Intelligence
           </span>
           <span style={{ fontSize: 10, padding: "4px 10px", border: "1px solid var(--accent-dim)",
             color: "var(--accent)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Beta
           </span>
+          {USE_DEMO && (
+            <span style={{ fontSize: 9, padding: "3px 8px", border: "1px solid var(--border)",
+              color: "var(--text-dim)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              Demo
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <span style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--text-muted)" }}>
+          <span className="nav-disclaimer" style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--text-muted)" }}>
             Not Financial Advice
           </span>
           {/* Theme toggle */}
@@ -282,7 +291,11 @@ export default function App() {
             {error}
           </div>
         )}
-        {result && <ResultsPanel result={result} />}
+        {result && (
+          <ErrorBoundary label="Results">
+            <ResultsPanel result={result} />
+          </ErrorBoundary>
+        )}
       </section>
 
       {/* ── Settings overlay ────────────────────────────────────── */}

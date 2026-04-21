@@ -154,7 +154,19 @@ function formatValue(metric: MetricDefinition, value: number): string {
   return value.toFixed(2);
 }
 
-const NEUTRAL_TONE = { border: "var(--border)", bg: "rgba(255,255,255,0.02)", label: "var(--text-muted)" };
+const NEUTRAL_TONE = { border: "var(--border)", bg: "var(--surface-2)", label: "var(--text-muted)" };
+
+const CATEGORY_LABELS: Record<MetricCategory, string> = {
+  valuation:   "Valuation",
+  profitability: "Profitability",
+  growth:      "Growth",
+  cashflow:    "Cash Flow",
+  balance:     "Balance Sheet",
+  dividend:    "Dividend",
+  risk:        "Risk",
+};
+
+const CATEGORY_ORDER: MetricCategory[] = ["valuation", "profitability", "growth", "cashflow", "balance", "dividend", "risk"];
 
 function directionalHighlight(metric: MetricDefinition, value: number): "green" | "red" | undefined {
   switch (metric.key) {
@@ -223,7 +235,7 @@ function MetricCell({ metric, value }: { metric: MetricDefinition; value: number
 export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
   if (error) {
     return (
-      <div className="panel-box fade-up fade-up-3">
+      <div className="panel-box fade-up fade-up-4">
         <div className="panel-label">Financial Metrics (Agent) - {periodLabel}</div>
         <div
           style={{
@@ -247,7 +259,7 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
 
   if (availableMetrics.length === 0) {
     return (
-      <div className="panel-box fade-up fade-up-3">
+      <div className="panel-box fade-up fade-up-4">
         <div className="panel-label">Financial Metrics (Agent) - {periodLabel}</div>
         <div
           style={{
@@ -265,13 +277,43 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
     );
   }
 
+  // Group by category, preserve order
+  const byCategory = new Map<MetricCategory, typeof availableMetrics>();
+  for (const cat of CATEGORY_ORDER) byCategory.set(cat, []);
+  for (const row of availableMetrics) {
+    byCategory.get(row.def.category)?.push(row);
+  }
+
   return (
-    <div className="panel-box fade-up fade-up-3">
-      <div className="panel-label">Financial Metrics (Agent) - {periodLabel}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {availableMetrics.map((row) => (
-          <MetricCell key={row.def.key} metric={row.def} value={row.value} />
-        ))}
+    <div className="panel-box fade-up fade-up-4">
+      <div className="panel-label">Financial Metrics — {periodLabel}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+        {CATEGORY_ORDER.map((cat) => {
+          const rows = byCategory.get(cat) ?? [];
+          if (rows.length === 0) return null;
+          return (
+            <div key={cat}>
+              {/* Category header */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                marginBottom: 12,
+              }}>
+                <span style={{
+                  fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase",
+                  color: "var(--text-dim)", fontFamily: "'DM Mono', monospace",
+                }}>
+                  {CATEGORY_LABELS[cat]}
+                </span>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {rows.map((row) => (
+                  <MetricCell key={row.def.key} metric={row.def} value={row.value} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

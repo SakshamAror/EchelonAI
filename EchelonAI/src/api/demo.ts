@@ -38,6 +38,8 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       peakIndex: 7,
       peakLabel: "Sep 14",
       deltaPrice: -8.2,
+      benchmarkPoints: [50.0, 50.2, 50.4, 50.5, 50.6, 50.7, 50.8, 51.0, 51.1, 51.3, 51.5],
+      benchmarkDelta: 1.5,
     },
     summary:
       "Nike declined sharply in September 2024 as weakening consumer demand in China and North America collided with margin pressure from elevated inventory levels. The brand's cultural momentum slowed amid rising competition from On Running and HOKA, while its 10-Q cited DTC headwinds and macro uncertainty as structural risks.",
@@ -90,6 +92,8 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       peakIndex: 8,
       peakLabel: "Aug 22",
       deltaPrice: 28.4,
+      benchmarkPoints: [50.0, 50.3, 50.6, 50.8, 51.0, 51.2, 51.4, 51.7, 51.9, 52.1, 52.3],
+      benchmarkDelta: 2.3,
     },
     summary:
       "Nvidia surged in August 2024 on the back of insatiable data center AI infrastructure demand. The H100 GPU remained the gold standard for LLM training, while Blackwell architecture announcements amplified cultural momentum across the AI investment narrative. Revenue beat by $1.4B and guidance was raised materially for Q3.",
@@ -140,6 +144,8 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       peakIndex: 0,
       peakLabel: "Dec 1",
       deltaPrice: -13.2,
+      benchmarkPoints: [50.0, 50.5, 51.0, 51.5, 51.8, 52.2, 52.7, 53.2, 53.6, 54.0, 54.5],
+      benchmarkDelta: 4.5,
     },
     summary:
       "Tesla faced margin compression in December 2023 as aggressive price cuts sustained volume but eroded profitability. Cultural headwinds from Musk's X platform controversy dampened brand sentiment, while BYD officially surpassed Tesla in global EV deliveries — a significant symbolic and competitive milestone that drove sustained negative press.",
@@ -346,6 +352,11 @@ function sanitizePriceChart(
     ? chart.peakLabel
     : labels[1];
 
+  const benchmarkPoints =
+    Array.isArray(chart.benchmarkPoints) && chart.benchmarkPoints.length >= 2
+      ? chart.benchmarkPoints.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+      : undefined;
+
   return {
     points,
     labels,
@@ -371,6 +382,11 @@ function sanitizePriceChart(
       typeof chart.lowPrice === "number" && Number.isFinite(chart.lowPrice)
         ? chart.lowPrice
         : null,
+    benchmarkPoints: benchmarkPoints && benchmarkPoints.length >= 2 ? benchmarkPoints : undefined,
+    benchmarkDelta:
+      typeof chart.benchmarkDelta === "number" && Number.isFinite(chart.benchmarkDelta)
+        ? chart.benchmarkDelta
+        : undefined,
   };
 }
 

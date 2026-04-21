@@ -1,5 +1,5 @@
 // READ instructions.txt before editing this file.
-// Alpha Score header — Bebas Neue big number, directional arrow, score bars.
+// Alpha Score header — price delta hero, vs-S&P verdict, signal bars.
 // Do NOT use "prediction" language. We explain movement, not forecast it.
 
 import type { AnalysisResult } from "@/types";
@@ -10,16 +10,21 @@ function fmtTF({ quarter, year }: { quarter: number; year: number }) {
   return `Q${quarter} ${year}`;
 }
 
+function fmtPct(value: number, showSign = true): string {
+  const sign = showSign && value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+}
+
 function ScoreBarRow({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-      <span style={{ fontSize: 10, letterSpacing: "0.05em", color: "var(--text-muted)", width: 120, flexShrink: 0, textTransform: "uppercase" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <span style={{ fontSize: 9, letterSpacing: "0.05em", color: "var(--text-muted)", width: 110, flexShrink: 0, textTransform: "uppercase" }}>
         {label}
       </span>
       <div className="score-bar-track">
         <div className="score-bar-fill" style={{ width: `${value}%`, background: color }} />
       </div>
-      <span style={{ fontSize: 12, color: "var(--text)", width: 36, textAlign: "right" }}>{value.toFixed(1)}</span>
+      <span style={{ fontSize: 11, color: "var(--text)", width: 34, textAlign: "right" }}>{value.toFixed(0)}</span>
     </div>
   );
 }
@@ -34,7 +39,7 @@ export default function ScoreCard({ result, error }: Props) {
   if (error) {
     return (
       <div className="panel-box fade-up fade-up-1">
-        <div className="panel-label">Echelon Score</div>
+        <div className="panel-label">Signal Overview</div>
         <div style={{
           padding: 14,
           border: "1px solid var(--red)",
@@ -50,12 +55,26 @@ export default function ScoreCard({ result, error }: Props) {
   }
 
   const dir = dirConfig[result.direction];
+  const deltaPrice = result.forumChart?.deltaPrice ?? 0;
+  const benchmarkDelta = result.forumChart?.benchmarkDelta;
+  const hasBDelta = typeof benchmarkDelta === "number" && Number.isFinite(benchmarkDelta);
+  const spread = hasBDelta ? deltaPrice - benchmarkDelta! : null;
+
+  let verdict = "";
+  let verdictColor = "var(--text-muted)";
+  if (spread !== null) {
+    if (spread > 2)  { verdict = "OUTPERFORMING S&P 500"; verdictColor = "var(--green)"; }
+    else if (spread < -2) { verdict = "UNDERPERFORMING S&P 500"; verdictColor = "var(--red)"; }
+    else { verdict = "IN LINE WITH S&P 500"; verdictColor = "var(--accent)"; }
+  }
+
+  const priceColor = deltaPrice >= 0 ? "var(--green)" : "var(--red)";
 
   return (
     <div className="panel-box fade-up fade-up-1">
-      <div className="panel-label">Echelon Score</div>
+      <div className="panel-label">Signal Overview</div>
 
-      {/* Watermark */}
+      {/* Ticker / period watermark */}
       <span style={{
         position: "absolute", top: 14, right: 18,
         fontSize: 9, letterSpacing: "0.3em", color: "var(--text-dim)",
@@ -64,44 +83,54 @@ export default function ScoreCard({ result, error }: Props) {
         {result.ticker} / {fmtTF(result.timeframe).toUpperCase()}
       </span>
 
-      {/* Main layout */}
+      {/* ── Top row: hero delta + direction + scores ─────────────── */}
       <div style={{
         display: "grid",
         gridTemplateColumns: "auto auto 1fr",
         alignItems: "center",
         gap: 32,
       }}>
-        {/* Big score number */}
+
+        {/* Hero: actual quarterly price change */}
         <div style={{ textAlign: "center" }}>
-          <p style={{ fontSize: 9, letterSpacing: "0.3em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 6 }}>
-            Echelon Score
+          <p style={{ fontSize: 9, letterSpacing: "0.25em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 6 }}>
+            Quarterly Return
           </p>
-          <p className="font-bebas" style={{ fontSize: 96, lineHeight: 1, color: "var(--accent)", letterSpacing: "-2px" }}>
-            {result.alphaScore.toFixed ? result.alphaScore.toFixed(0) : result.alphaScore}
+          <p className="font-bebas" style={{ fontSize: 88, lineHeight: 1, color: priceColor, letterSpacing: "-2px" }}>
+            {fmtPct(deltaPrice)}
           </p>
-          <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
-            {result.alphaScore >= 70 ? "Elevated Signal" : result.alphaScore >= 45 ? "Mixed Signal" : "Weak Signal"}
-          </p>
+          {/* vs-S&P verdict */}
+          {spread !== null && (
+            <div style={{ marginTop: 6 }}>
+              <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", color: verdictColor, textTransform: "none" }}>
+                {verdict}
+              </p>
+              <p style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2 }}>
+                {spread > 0 ? "+" : ""}{spread.toFixed(1)}pp vs S&P&nbsp;({fmtPct(benchmarkDelta!)})
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Directional arrow */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <p className="font-bebas" style={{ fontSize: 64, lineHeight: 1, color: dir.color, margin: 0 }}>
+          <p className="font-bebas" style={{ fontSize: 56, lineHeight: 1, color: dir.color, margin: 0 }}>
             {dir.arrow}
           </p>
-          <span style={{ fontSize: 9, letterSpacing: "0.2em", color: "var(--text-muted)", textTransform: "uppercase" }}>
-            Price Δ
+          <span style={{ fontSize: 9, letterSpacing: "0.15em", color: "var(--text-muted)", textTransform: "uppercase" }}>
+            {result.direction === "up" ? "Gained" : result.direction === "down" ? "Declined" : "Flat"}
           </span>
         </div>
 
         {/* Score bars */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <ScoreBarRow label="Cultural Score"   value={result.culturalScore}   color="var(--purple)" />
-          <ScoreBarRow label="Financial Score"  value={result.financialScore}  color="var(--green)"  />
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <ScoreBarRow label="Echelon Score"  value={result.alphaScore}      color="var(--accent)"  />
+          <ScoreBarRow label="Cultural"       value={result.culturalScore}   color="var(--purple)"  />
+          <ScoreBarRow label="Financial"      value={result.financialScore}  color="var(--green)"   />
         </div>
       </div>
 
-      {/* Score methodology dropdown */}
+      {/* ── Score methodology ────────────────────────────────────── */}
       <details style={{ marginTop: 20, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
         <summary style={{
           cursor: "pointer",

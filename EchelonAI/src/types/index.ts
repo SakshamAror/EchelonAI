@@ -68,15 +68,17 @@ export interface CulturalSignal {
 }
 
 export interface ForumChartData {
-  points: number[];    // normalized 0–100 values, ~11 data points
-  labels: string[];    // [start, mid, end] x-axis labels
-  peakIndex: number;   // index into points[] where peak occurred
-  peakLabel: string;   // human label, e.g. "Oct 14"
-  deltaPrice: number;  // % change in price over same period
+  points: number[];              // normalized 0–100 values, ~11 data points
+  labels: string[];              // [start, mid, end] x-axis labels
+  peakIndex: number;             // index into points[] where peak occurred
+  peakLabel: string;             // human label, e.g. "Oct 14"
+  deltaPrice: number;            // % change in price over same period
   startPrice?: number | null;
   endPrice?: number | null;
   highPrice?: number | null;
   lowPrice?: number | null;
+  benchmarkPoints?: number[];    // S&P 500 performance-rebased to same 0–100 scale
+  benchmarkDelta?: number;       // S&P 500 % change over same period
 }
 
 export interface Source {
