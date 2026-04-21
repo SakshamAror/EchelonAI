@@ -10,6 +10,11 @@ function fmtUsd(value: number | null | undefined): string {
   return `$${value.toFixed(2)}`;
 }
 
+function fmtPct(value: number, showSign = true): string {
+  const sign = showSign && value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+}
+
 export default function ForumChart({ data, error }: Props) {
   if (error) {
     return (
@@ -29,11 +34,22 @@ export default function ForumChart({ data, error }: Props) {
     );
   }
 
-  const { points, labels, peakIndex, peakLabel, deltaPrice, startPrice, endPrice, highPrice, lowPrice } = data;
+  const {
+    points, labels, peakIndex, peakLabel,
+    deltaPrice, startPrice, endPrice, highPrice, lowPrice,
+    benchmarkPoints, benchmarkDelta,
+  } = data;
+
   const W = 600;
   const H = 160;
   const n = points.length;
   const denom = Math.max(n - 1, 1);
+
+  // Direction-aware stock line color
+  const isUp = deltaPrice >= 0;
+  const stockColor = isUp ? "var(--green)" : "var(--red)";
+  const stockColorHex = isUp ? "#3ddc84" : "#ff4c4c";
+  const gradStopColor = isUp ? "#3ddc84" : "#ff4c4c";
 
   const pts = points.map((v, i) => ({
     x: (i / denom) * W,
@@ -45,38 +61,65 @@ export default function ForumChart({ data, error }: Props) {
     `M${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L")}` +
     ` L${W},${H} L0,${H} Z`;
 
+  // Benchmark (S&P 500) polyline
+  const hasBenchmark = Array.isArray(benchmarkPoints) && benchmarkPoints.length >= 2;
+  const bDenom = hasBenchmark ? Math.max((benchmarkPoints!.length - 1), 1) : 1;
+  const bPolyline = hasBenchmark
+    ? benchmarkPoints!.map((v, i) => `${((i / bDenom) * W).toFixed(1)},${(H - (v / 100) * H).toFixed(1)}`).join(" ")
+    : "";
+
   const clampedPeakIndex = Math.max(0, Math.min(pts.length - 1, peakIndex));
   const peak = pts[clampedPeakIndex] ?? { x: 0, y: H };
-
-  // Express peak position as % of SVG width for HTML overlay
   const peakPct = `${((peak.x / W) * 100).toFixed(2)}%`;
   const peakTopPct = `${((peak.y / H) * 100).toFixed(2)}%`;
 
-  const isUp = deltaPrice >= 0;
+  // vs-benchmark verdict
+  const hasBDelta = typeof benchmarkDelta === "number" && Number.isFinite(benchmarkDelta);
+  const spread = hasBDelta ? deltaPrice - benchmarkDelta! : null;
+  let verdict = "";
+  let verdictColor = "var(--text-muted)";
+  if (spread !== null) {
+    if (spread > 2) { verdict = "OUTPERFORMING S&P 500"; verdictColor = "var(--green)"; }
+    else if (spread < -2) { verdict = "UNDERPERFORMING S&P 500"; verdictColor = "var(--red)"; }
+    else { verdict = "IN LINE WITH S&P 500"; verdictColor = "var(--accent)"; }
+  }
+
   const deltaColor = isUp ? "var(--green)" : "var(--red)";
 
   return (
     <div className="panel-box">
       <div className="panel-label">Stock Price / Quarter</div>
 
-      {/* ── Big full-width price change metric ─────────────────── */}
+      {/* ── Price change + vs-benchmark header ─────────────────── */}
       <div style={{
         display: "flex",
-        alignItems: "baseline",
+        alignItems: "flex-start",
         justifyContent: "space-between",
         borderLeft: `4px solid ${deltaColor}`,
         paddingLeft: 16,
         marginBottom: 20,
+        gap: 12,
       }}>
         <div>
           <p style={{ fontSize: 9, letterSpacing: "0.25em", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 4 }}>
             Quarterly Price Change
           </p>
           <p className="font-bebas" style={{ fontSize: 56, lineHeight: 1, color: deltaColor, letterSpacing: "0px" }}>
-            {isUp ? "+" : ""}{deltaPrice.toFixed(2)}%
+            {fmtPct(deltaPrice)}
           </p>
+          {/* vs-S&P row */}
+          {spread !== null && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: verdictColor }}>
+                {verdict}
+              </span>
+              <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                {spread > 0 ? "+" : ""}{spread.toFixed(1)}pp vs S&P ({fmtPct(benchmarkDelta!)})
+              </span>
+            </div>
+          )}
         </div>
-        <div style={{ textAlign: "right", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.8 }}>
+        <div style={{ textAlign: "right", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.8, flexShrink: 0 }}>
           <div>High <span style={{ color: "var(--green)", marginLeft: 6 }}>{fmtUsd(highPrice)}</span></div>
           <div>Low <span style={{ color: "var(--red)", marginLeft: 6 }}>{fmtUsd(lowPrice)}</span></div>
           <div style={{ fontSize: 10, marginTop: 4 }}>
@@ -85,10 +128,8 @@ export default function ForumChart({ data, error }: Props) {
         </div>
       </div>
 
-      {/* ── Chart: SVG lines + HTML text overlay ───────────────── */}
+      {/* ── Chart ───────────────────────────────────────────────── */}
       <div style={{ position: "relative", marginBottom: 28 }}>
-
-        {/* SVG — no text nodes to avoid stretching */}
         <div style={{ height: 160 }}>
           <svg
             viewBox={`0 0 ${W} ${H}`}
@@ -97,43 +138,62 @@ export default function ForumChart({ data, error }: Props) {
           >
             <defs>
               <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3ddc84" stopOpacity="0.28" />
-                <stop offset="100%" stopColor="#3ddc84" stopOpacity="0" />
+                <stop offset="0%" stopColor={gradStopColor} stopOpacity="0.24" />
+                <stop offset="100%" stopColor={gradStopColor} stopOpacity="0" />
               </linearGradient>
             </defs>
 
+            {/* Grid lines */}
             {[40, 80, 120].map((y) => (
               <line key={y} x1="0" y1={y} x2={W} y2={y} stroke="#222" strokeWidth="1" />
             ))}
 
+            {/* Midline (performance baseline) */}
+            <line x1="0" y1={H / 2} x2={W} y2={H / 2} stroke="#444" strokeWidth="0.75" strokeDasharray="4,4" />
+
+            {/* Fill under stock line */}
             <path d={fillPath} fill="url(#priceGrad)" />
 
+            {/* S&P 500 benchmark line */}
+            {hasBenchmark && (
+              <polyline
+                points={bPolyline}
+                fill="none"
+                stroke="#f5a623"
+                strokeWidth="1.2"
+                strokeDasharray="5,4"
+                strokeOpacity="0.65"
+                strokeLinejoin="round"
+              />
+            )}
+
+            {/* Stock price line */}
             <polyline
               points={polyline}
               fill="none"
-              stroke="#3ddc84"
+              stroke={stockColorHex}
               strokeWidth="1.8"
               strokeLinejoin="round"
             />
 
-            {/* Peak dashed vertical + dot (no text) */}
+            {/* Peak dashed vertical + dot */}
             <line
               x1={peak.x} y1={peak.y}
               x2={peak.x} y2="2"
-              stroke="#3ddc84" strokeWidth="1" strokeDasharray="3,3"
+              stroke={stockColorHex} strokeWidth="1" strokeDasharray="3,3"
             />
-            <circle cx={peak.x} cy={peak.y} r="3.5" fill="#3ddc84" />
+            <circle cx={peak.x} cy={peak.y} r="3.5" fill={stockColorHex} />
           </svg>
         </div>
 
-        {/* Peak label — HTML overlay, not stretched by SVG transform */}
+        {/* Peak label — HTML overlay */}
         <div style={{
           position: "absolute",
           left: peakPct,
           top: peakTopPct,
           transform: "translate(-50%, -140%)",
           fontSize: 10,
-          color: "#3ddc84",
+          color: stockColor,
           fontFamily: "'DM Mono', monospace",
           whiteSpace: "nowrap",
           pointerEvents: "none",
@@ -141,7 +201,7 @@ export default function ForumChart({ data, error }: Props) {
           {peakLabel}
         </div>
 
-        {/* X-axis labels — HTML row below chart, not inside SVG */}
+        {/* X-axis labels */}
         <div style={{
           position: "absolute",
           bottom: -20,
@@ -162,6 +222,20 @@ export default function ForumChart({ data, error }: Props) {
           ))}
         </div>
       </div>
+
+      {/* ── Legend ──────────────────────────────────────────────── */}
+      {hasBenchmark && (
+        <div style={{ display: "flex", gap: 20, marginTop: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke={stockColorHex} strokeWidth="2" /></svg>
+            <span style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.06em" }}>Stock</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#f5a623" strokeWidth="1.5" strokeDasharray="4,3" /></svg>
+            <span style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.06em" }}>S&P 500</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

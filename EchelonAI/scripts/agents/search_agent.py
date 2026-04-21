@@ -128,6 +128,19 @@ def _parse_article_date(date_str: str) -> Optional[date]:
     return None
 
 
+def _is_relevant_to_company(article: Dict, company_words: List[str], ticker: str) -> bool:
+    """
+    Return True if the article plausibly covers the queried company.
+    Checks title + content for any significant company word or the ticker symbol.
+    """
+    title = (article.get("title") or "").lower()
+    content = (article.get("content") or "").lower()
+    haystack = title + " " + content
+    if ticker and ticker.lower() in haystack:
+        return True
+    return any(w in haystack for w in company_words)
+
+
 def _in_month(date_str: str, year: int, month: int) -> bool:
     """Return True if date_str falls within year/month, or if date is unparseable (give benefit of doubt)."""
     d = _parse_article_date(date_str)
@@ -329,7 +342,7 @@ def compute_social_score(articles: List[Dict[str, object]]) -> float:
     return max(0.0, min(100.0, score))
 
 
-def search_cultural_events(term: str, year: int, month: int) -> List[Dict[str, object]]:
+def search_cultural_events(term: str, year: int, month: int, ticker: str = "") -> List[Dict[str, object]]:
     """
     Search the web for news and cultural events related to a term within a specific month and year.
 
@@ -396,6 +409,14 @@ def search_cultural_events(term: str, year: int, month: int) -> List[Dict[str, o
 
     # Hard date filter — drop articles with a parseable date outside this month
     articles = [a for a in articles if _in_month(str(a.get("published_date", "")), year, month)]
+
+    # Company relevance filter — drop articles that don't mention the company or ticker.
+    # Meaningful words only (len > 2 to skip noise like "co", "of", "the").
+    company_words = [w for w in term.lower().split() if len(w) > 2]
+    relevant = [a for a in articles if _is_relevant_to_company(a, company_words, ticker)]
+    # Fall back to unfiltered set if relevance filter is too aggressive
+    if len(relevant) >= 2:
+        articles = relevant
 
     # Filter to reputable domains only; fall back to all if < 2 reputable found
     reputable = [a for a in articles if _domain_from_url(str(a.get("url", ""))) in REPUTABLE_DOMAINS]

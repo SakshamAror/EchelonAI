@@ -97,6 +97,7 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
 
   const requestSeqRef = useRef(0);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
     function handleDocumentClick(event: MouseEvent) {
@@ -109,6 +110,18 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
 
     document.addEventListener("mousedown", handleDocumentClick);
     return () => document.removeEventListener("mousedown", handleDocumentClick);
+  }, []);
+
+  // Cmd+Enter (Mac) / Ctrl+Enter (Win) submits from anywhere on the page
+  useEffect(() => {
+    function handleGlobalKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+      }
+    }
+    document.addEventListener("keydown", handleGlobalKey);
+    return () => document.removeEventListener("keydown", handleGlobalKey);
   }, []);
 
   useEffect(() => {
@@ -202,7 +215,7 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
   const canSubmit = keysReady && !!query.trim() && !loading && !searchLoading && (selectedEquity !== null || results.length > 0);
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form ref={formRef} onSubmit={handleSubmit}>
       <div style={{ display: "flex", gap: 12, marginBottom: 6 }}>
         <div style={{ flex: 2 }}>
           <label style={{ fontSize: 9, letterSpacing: "0.2em", color: "var(--text-muted)", textTransform: "uppercase" }}>
@@ -217,7 +230,7 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
         <div style={{ width: 120 }} />
       </div>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+      <div className="search-row" style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
         <div ref={searchBoxRef} style={{ flex: 2, position: "relative" }}>
           <input
             className="search-field"
@@ -384,7 +397,7 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
             e.currentTarget.style.transform = "none";
           }}
         >
-          {loading ? "Analyzing..." : !keysReady ? "Add API Keys →" : "Analyze →"}
+          {loading ? "Analyzing..." : !keysReady ? "Add API Keys →" : "Analyze ⌘↵"}
         </button>
       </div>
 

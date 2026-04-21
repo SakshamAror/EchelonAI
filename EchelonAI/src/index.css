@@ -195,6 +195,10 @@
     border: 1px solid var(--accent-dim);
     background: rgba(245, 166, 35, 0.18);
   }
+
+  [data-theme="light"] .panel-label {
+    background: rgba(168, 100, 0, 0.10);
+  }
   .panel-label::after {
     content: '';
     flex: 1;
@@ -318,6 +322,25 @@
       font-size: 9px;
       letter-spacing: 0.18em;
       margin-bottom: 14px;
+    }
+  }
+
+  /* ── Mobile layout ──────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    /* Stack search form inputs vertically */
+    .search-row {
+      flex-direction: column !important;
+    }
+    .search-row > div,
+    .search-row > button {
+      flex: none !important;
+      width: 100% !important;
+    }
+
+    /* Tighten nav on small screens */
+    .nav-subtitle,
+    .nav-disclaimer {
+      display: none;
     }
   }
 }

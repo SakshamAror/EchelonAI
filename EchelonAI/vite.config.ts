@@ -12,6 +12,10 @@ const execFileAsync = promisify(execFile);
 // Mutable runtime key state — populated by /settings endpoint, injected into subprocesses as env vars
 const runtimeKeys = { groqApiKey: "", tavilyApiKey: "" };
 
+// In-memory cache for /agent-data responses — avoids re-running Python on repeated queries
+const agentCache = new Map<string, { data: string; ts: number }>();
+const AGENT_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
 function maskKey(key: string): string {
   if (!key) return "";
   if (key.length < 12) return "***";
@@ -128,7 +132,7 @@ RULES — no exceptions:
 5) metricCitations: only keys present in DATA.displayedMetricKeys.
 6) culturalSignalCitations: only indices from DATA.displayedCulturalSignals[].index.
 7) Every reasoning item must cite ≥1 metric OR ≥1 signal.
-8) Cover every non-null metric key and every signal index across the full reasoning list.
+8) Prioritise the 3-5 metrics with the most unusual or market-moving values (e.g., extreme growth, margin collapse, valuation outlier). Skip metrics with unremarkable readings unless they directly explain price action. Do not manufacture bullets for routine or mid-range values.
 9) Past tense only: "reported", "fell", "posted", "showed". Never "is", "has", "remains".
 10) Use only DATA below — no outside knowledge, no invented numbers.
 
@@ -256,6 +260,16 @@ function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
           return;
         }
 
+        const cacheKey = `${ticker}:${quarter}:${year}`;
+        const cached = agentCache.get(cacheKey);
+        if (cached && Date.now() - cached.ts < AGENT_CACHE_TTL_MS) {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("X-Cache", "HIT");
+          res.end(cached.data);
+          return;
+        }
+
         try {
           const { stdout } = await execFileAsync(
             agentPythonBin,
@@ -277,6 +291,7 @@ function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
             }
           );
 
+          agentCache.set(cacheKey, { data: stdout, ts: Date.now() });
           res.statusCode = 200;
           res.setHeader("Content-Type", "application/json");
           res.end(stdout);
