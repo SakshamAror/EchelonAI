@@ -145,19 +145,19 @@ export default function ScoreCard({ result, error }: Props) {
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
           {[
             {
-              label: "Financial Score (55% of Echelon)",
+              label: "Financial Score (65% of Echelon)",
               color: "var(--green)",
-              desc: "Weighted blend of P/E, PEG, ROE, ROA, profit margins, debt/equity, current ratio, and growth rates. Metrics that indicate strength (high ROE, strong margins, low leverage) push the score above 50; weakness pushes it below.",
+              desc: "Weighted blend of revenue growth, earnings growth, ROE, ROA, profit margins, debt/equity, trailing P/E, and current ratio. Each metric adjusts the base score of 50 — strong fundamentals push it above, weakness pushes it below. Capped per-metric to prevent any single reading from dominating.",
             },
             {
-              label: "Cultural Score (30% of Echelon)",
+              label: "Cultural Score (35% of Echelon)",
               color: "var(--purple)",
-              desc: "Sentiment of news articles fetched via Tavily, weighted by outlet traffic (Reuters, Bloomberg, CNBC, etc. rank higher). Positive/negative article sentiment shifts the score from the 50-point baseline. Article count and relevance provide an additional coverage boost.",
+              desc: "Sentiment of news articles fetched via Tavily, weighted by outlet traffic (Reuters, Bloomberg, CNBC, WSJ, FT, etc. rank higher). Positive/negative article sentiment shifts the score from the 78-point baseline. A single outlet's weight is capped at 35% of total to prevent outsized influence.",
             },
             {
               label: "Echelon Score",
               color: "var(--accent)",
-              desc: "Composite of financial fundamentals, cultural sentiment, and media momentum. Reflects the overall quality of combined signals for the selected stock and quarter.",
+              desc: "Composite of financial fundamentals (65%) and cultural sentiment (35%). Reflects the overall signal quality for the selected stock and quarter — not a buy/sell recommendation.",
             },
           ].map((row, i) => (
             <div key={i} style={{ borderLeft: `3px solid ${row.color}`, paddingLeft: 12 }}>

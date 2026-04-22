@@ -64,9 +64,6 @@ Three pre-built examples — Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023 — wit
 **Light / Dark Mode**
 Full theme toggle with high-contrast signal colors in both modes.
 
-**Keyboard Shortcut**
-`⌘ Enter` / `Ctrl Enter` submits the analysis from anywhere on the page.
-
 ---
 
 ## Tech Stack
@@ -161,17 +158,16 @@ The Vite dev server exposes five middleware routes bridging the frontend to the 
 
 ## Echelon Score
 
-The Echelon Score (0–100) is a composite of three independently computed signals:
+The Echelon Score (0–100) is a composite of two independently computed signals:
 
 ```
-Echelon Score = 0.55 × Financial Score
-              + 0.30 × Cultural Score
-              + 0.15 × Forum Momentum
+Echelon Score = 0.65 × Financial Score
+              + 0.35 × Cultural Score
 ```
 
 ### Financial Score
 
-Base score of 50, adjusted by clamped weighted contributions:
+Base score of 50, adjusted by clamped weighted contributions from each available metric:
 
 | Metric | Weight | Direction |
 |---|---|---|
@@ -182,12 +178,13 @@ Base score of 50, adjusted by clamped weighted contributions:
 | Profit Margins | 45× | Higher → better |
 | Debt / Equity | 6× inverted | Lower → better |
 | Trailing P/E | 0.7× inverted | Lower → better |
-| PEG Ratio | 5× inverted | Lower → better |
 | Current Ratio | 6× (from 1.0) | Higher → better |
+
+Each metric contribution is individually clamped to prevent any single reading from dominating the score. If a metric is unavailable for the period, it is skipped.
 
 ### Cultural Score
 
-Sentiment-weighted score from reputable news articles, using outlet traffic as signal weight:
+Sentiment-weighted score derived from reputable news articles, using outlet traffic as signal weight:
 
 ```
 score = 78 + 40 × sentiment_index
@@ -198,16 +195,9 @@ score = 78 + 40 × sentiment_index
 - **sentiment_index** — traffic-weighted average article sentiment (−1 to +1)
 - **polarity_ratio** — (positive_weight − negative_weight) / total_weight
 - **impact_index** — avg(relevance_scores) / 12, capped at 1.0
-- Outlet weights are capped at 35% of total to prevent single-outlet dominance
+- A single outlet's weight is capped at 35% of total to prevent outsized influence
 
 Reputable outlets: Reuters, Bloomberg, CNBC, Financial Times, WSJ, AP News, BBC, The Guardian
-
-### Forum Momentum (internal)
-
-```
-forum_momentum = 0.85 × cultural_score
-               + min(12, article_count × 0.65 + avg_relevance × 0.5)
-```
 
 ---
 
@@ -255,7 +245,7 @@ GROQ_MODEL=llama-3.3-70b-versatile
 AGENT_PYTHON_BIN=.venv/bin/python
 ```
 
-API keys can also be entered at runtime via the ⚙ Settings panel — no `.env` required for normal use.
+API keys are most easily added at runtime via the ⚙ Settings panel in the app — no `.env` file required for normal use.
 
 ### Run
 
@@ -306,6 +296,16 @@ AIStockScreener/
 │   └── package.json
 └── README.md
 ```
+
+---
+
+## Roadmap
+
+EchelonAI is actively expanding. Planned directions include:
+
+- **AI-driven stock screener** — surface stocks with unusual signal combinations across a universe of equities, rather than analyzing one at a time
+- **Enhanced benchmarking** — deeper comparison against sector indices, peer groups, and factor benchmarks beyond the S&P 500
+- **Sentiment-driven multi-factor simulation** — a forward-looking layer that models how current cultural and financial signal combinations have historically resolved, enabling hypothesis-driven scenario analysis
 
 ---
 

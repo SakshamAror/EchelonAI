@@ -327,13 +327,6 @@ def compute_financial_score(metrics: Dict[str, Optional[float]]) -> float:
     return round(clamp(score), 2)
 
 
-def compute_forum_momentum(cultural_score: float, articles: List[Dict[str, Any]]) -> float:
-    if not articles:
-        return round(clamp(cultural_score), 2)
-    avg_relevance = sum(float(a.get("relevance_score", 0.0)) for a in articles) / max(len(articles), 1)
-    coverage_boost = min(12.0, len(articles) * 0.65 + avg_relevance * 0.5)
-    momentum = 0.85 * cultural_score + coverage_boost
-    return round(clamp(momentum), 2)
 
 
 def build_sources(signals: List[Dict[str, Any]], ticker: str) -> List[Dict[str, str]]:
@@ -432,8 +425,7 @@ def main() -> None:
         errors["priceChart"] = price_error
 
     financial_score = compute_financial_score(financial_metrics)
-    forum_momentum = compute_forum_momentum(cultural_score, deduped_articles)
-    alpha_score = round(clamp(0.55 * financial_score + 0.30 * cultural_score + 0.15 * forum_momentum), 2)
+    alpha_score = round(clamp(0.65 * financial_score + 0.35 * cultural_score), 2)
 
     payload = {
         "ticker": ticker,
@@ -444,7 +436,7 @@ def main() -> None:
         "scores": {
             "financialScore": financial_score,
             "culturalScore": cultural_score,
-            "forumMomentumScore": forum_momentum,
+            "forumMomentumScore": 0,
             "alphaScore": alpha_score,
         },
         "priceChart": price_chart,
