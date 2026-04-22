@@ -1,4 +1,4 @@
-# EchelonAI — Cultural Signal Intelligence Platform
+# EchelonAI
 
 <p align="center">
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white">
