@@ -1,7 +1,7 @@
 // READ instructions.txt before editing this file.
 // Hardcoded demo fixtures. Demo companies: Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023
 
-import type { AnalysisRequest, AnalysisResult, FinancialMetrics, ReasoningPoint, SecFiling, Source, TimeFrame } from "@/types";
+import type { AnalysisRequest, AnalysisResult, FinancialMetrics, PeerCohort, ReasoningPoint, SecFiling, Source, TimeFrame } from "@/types";
 
 export const DEMO_RESULTS: Record<string, AnalysisResult> = {
   // ─── NIKE Q3 2024 ─────────────────────────────────────────────────────────
@@ -871,10 +871,104 @@ async function extractErrorDetail(res: Response, fallback: string): Promise<stri
   }
 }
 
+// ─── Peer cohort helpers ──────────────────────────────────────────────────
+
+interface RawPeerEntry {
+  ticker: string;
+  companyName: string;
+  quarterlyReturn: number | null;
+  financialScore: number;
+  culturalScore: number;
+  culturalSentiment: "pos" | "neg" | "neutral";
+  topHeadline?: string;
+}
+
+interface RawPeerDataResponse {
+  peers: RawPeerEntry[];
+  error?: string;
+}
+
+async function fetchRawPeerData(
+  ticker: string, company: string, quarter: number, year: number
+): Promise<RawPeerDataResponse | null> {
+  try {
+    const params = new URLSearchParams({ ticker, company, quarter: String(quarter), year: String(year) });
+    const res = await fetch(`/peer-data?${params.toString()}`);
+    if (!res.ok) return null;
+    return (await res.json()) as RawPeerDataResponse;
+  } catch {
+    return null;
+  }
+}
+
+async function getPeerNarrative(
+  mainTicker: string,
+  mainCompany: string,
+  timeframe: TimeFrame,
+  mainResult: AnalysisResult,
+  peers: RawPeerEntry[]
+): Promise<string> {
+  try {
+    const res = await fetch("/peer-synthesis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mainTicker,
+        mainCompany,
+        timeframe,
+        mainFinancialScore: mainResult.financialScore,
+        mainCulturalScore: mainResult.culturalScore,
+        mainQuarterlyReturn: mainResult.forumChart?.deltaPrice ?? null,
+        peers,
+      }),
+    });
+    if (!res.ok) return "";
+    const data = (await res.json()) as { narrative?: string };
+    return typeof data.narrative === "string" ? data.narrative : "";
+  } catch {
+    return "";
+  }
+}
+
+async function buildPeerCohort(
+  peerDataPromise: Promise<RawPeerDataResponse | null>,
+  mainTicker: string,
+  mainCompany: string,
+  timeframe: TimeFrame,
+  mainResult: AnalysisResult
+): Promise<PeerCohort | null> {
+  try {
+    const rawData = await Promise.race([
+      peerDataPromise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 50000)),
+    ]);
+    if (!rawData || !rawData.peers || rawData.peers.length === 0) return null;
+
+    const narrative = await getPeerNarrative(mainTicker, mainCompany, timeframe, mainResult, rawData.peers);
+    return {
+      peers: rawData.peers.map((p) => ({
+        ticker: p.ticker,
+        companyName: p.companyName,
+        quarterlyReturn: p.quarterlyReturn,
+        financialScore: p.financialScore,
+        culturalScore: p.culturalScore,
+        culturalSentiment: p.culturalSentiment,
+        topHeadline: p.topHeadline,
+      })),
+      narrative,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function buildLiveResultFromBase(
   base: AnalysisResult,
   timeframe: TimeFrame
 ): Promise<AnalysisResult> {
+  // Start peer fetch immediately — runs in parallel with the main agent pipeline
+  const peerDataPromise = fetchRawPeerData(base.ticker, base.companyName, timeframe.quarter, timeframe.year);
+
   try {
     const params = new URLSearchParams({
       ticker: base.ticker,
@@ -960,10 +1054,15 @@ async function buildLiveResultFromBase(
       },
     };
 
-    const { payload: llm, error: llmError } = await getGroqSynthesis(resultWithLiveMetrics);
+    const [{ payload: llm, error: llmError }, peerCohort] = await Promise.all([
+      getGroqSynthesis(resultWithLiveMetrics),
+      buildPeerCohort(peerDataPromise, base.ticker, base.companyName, timeframe, resultWithLiveMetrics),
+    ]);
+
     if (!llm) {
       return {
         ...resultWithLiveMetrics,
+        peerCohort,
         dataErrors: {
           ...resultWithLiveMetrics.dataErrors,
           synthesis: `Synthesis error: ${llmError ?? "unknown LLM failure"}`,
@@ -1024,6 +1123,7 @@ async function buildLiveResultFromBase(
       ...resultWithLiveMetrics,
       summary: llm.summary,
       reasoning: mappedReasoning.length > 0 ? mappedReasoning : resultWithLiveMetrics.reasoning,
+      peerCohort,
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Unexpected data fetch failure";

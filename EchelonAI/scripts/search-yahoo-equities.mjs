@@ -22,6 +22,18 @@ function normalizeTicker(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
+// Yahoo Finance exchange codes for US markets (NYSE, NASDAQ, NYSE Arca, NYSE American, BATS)
+const US_EXCHANGE_CODES = new Set([
+  "NYQ",  // NYSE
+  "NMS",  // NASDAQ Global Select Market
+  "NGM",  // NASDAQ Global Market
+  "NCM",  // NASDAQ Capital Market
+  "ASE",  // NYSE American (AMEX)
+  "PCX",  // NYSE Arca
+  "BATS", // BATS/CBOE
+  "BTS",
+]);
+
 function isPublicListedEquity(quote) {
   if (!quote || quote.quoteType !== "EQUITY") return false;
 
@@ -29,11 +41,7 @@ function isPublicListedEquity(quote) {
   if (!symbol) return false;
 
   const exchange = String(quote.exchange ?? "").trim().toUpperCase();
-  if (!exchange) return false;
-
-  // Exclude OTC/grey market and synthetic/non-listed quote containers.
-  const disallowedExchanges = new Set(["PNK", "OTC", "OTCM", "GREY", "YHD"]);
-  if (disallowedExchanges.has(exchange)) return false;
+  if (!US_EXCHANGE_CODES.has(exchange)) return false;
 
   return true;
 }

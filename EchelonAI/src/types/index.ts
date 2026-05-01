@@ -106,6 +106,21 @@ export interface ReasoningPoint {
   detailAnchor?: string;
 }
 
+export interface PeerCompany {
+  ticker: string;
+  companyName: string;
+  quarterlyReturn: number | null;
+  financialScore: number;
+  culturalScore: number;
+  culturalSentiment: "pos" | "neg" | "neutral";
+  topHeadline?: string;
+}
+
+export interface PeerCohort {
+  peers: PeerCompany[];
+  narrative: string;
+}
+
 export interface AnalysisResult {
   ticker: string;
   companyName: string;
@@ -122,6 +137,7 @@ export interface AnalysisResult {
   summary: string;
   sources: Source[];
   secFiling?: SecFiling | null;
+  peerCohort?: PeerCohort | null;
   dataErrors?: {
     scorecard?: string;
     forumChart?: string;

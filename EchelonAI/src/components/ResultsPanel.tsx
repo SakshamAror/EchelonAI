@@ -10,6 +10,7 @@ import CulturalSignals from "./CulturalSignals";
 import MetricsPanel from "./MetricsPanel";
 import SecFilingPanel from "./SecFilingPanel";
 import SourcesList from "./SourcesList";
+import PeerCohortPanel from "./PeerCohortPanel";
 
 interface Props { result: AnalysisResult }
 
@@ -246,10 +247,13 @@ export default function ResultsPanel({ result }: Props) {
       {/* 1 — Signal overview (price delta + scores) */}
       <ScoreCard result={result} error={result.dataErrors?.scorecard} />
 
-      {/* 2 — Synthesis (LLM summary + signal bullets) */}
+      {/* 2 — Peer cohort comparison */}
+      <PeerCohortPanel result={result} />
+
+      {/* 3 — Synthesis (LLM summary + signal bullets) */}
       <AlphaSynthesis result={result} onJumpToDetail={jumpToDetail} />
 
-      {/* 3 — Chart + Cultural signals side by side */}
+      {/* 4 — Chart + Cultural signals side by side */}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }} className="fade-up fade-up-3">
         <ForumChart data={result.forumChart} error={result.dataErrors?.forumChart} />
         <CulturalSignals
@@ -259,10 +263,10 @@ export default function ResultsPanel({ result }: Props) {
         />
       </div>
 
-      {/* 4 — Financial metrics */}
+      {/* 5 — Financial metrics */}
       <MetricsPanel metrics={result.metrics} periodLabel={periodLabel} error={result.dataErrors?.financial} />
 
-      {/* 5 — SEC filing */}
+      {/* 6 — SEC filing */}
       <SecFilingPanel
         filing={result.secFiling}
         error={result.dataErrors?.secFiling}
@@ -270,7 +274,7 @@ export default function ResultsPanel({ result }: Props) {
         year={result.timeframe.year}
       />
 
-      {/* 6 — Sources */}
+      {/* 7 — Sources */}
       <SourcesList sources={result.sources} error={result.dataErrors?.sources} />
     </div>
   );

@@ -14,6 +14,7 @@ const runtimeKeys = { groqApiKey: "", tavilyApiKey: "" };
 
 // In-memory cache for /agent-data responses — avoids re-running Python on repeated queries
 const agentCache = new Map<string, { data: string; ts: number }>();
+const peerCache  = new Map<string, { data: string; ts: number }>();
 const AGENT_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 function maskKey(key: string): string {
@@ -49,6 +50,7 @@ const yahooScriptPath = path.resolve(__dirname, "./scripts/fetch-yfinance-metric
 const yahooResolveScriptPath = path.resolve(__dirname, "./scripts/resolve-yahoo-ticker.mjs");
 const yahooSearchScriptPath = path.resolve(__dirname, "./scripts/search-yahoo-equities.mjs");
 const agentDataScriptPath = path.resolve(__dirname, "./scripts/fetch-agent-data.py");
+const peerDataScriptPath  = path.resolve(__dirname, "./scripts/fetch-peer-data.py");
 const defaultAgentPythonPath = path.resolve(__dirname, "./.venv/bin/python");
 
 interface AlphaSynthesisInput {
@@ -228,6 +230,43 @@ async function callGroqSynthesis(input: AlphaSynthesisInput, apiKey: string, mod
   return parseJsonContent(text);
 }
 
+interface PeerSynthesisInput {
+  mainTicker: string;
+  mainCompany: string;
+  timeframe: { quarter: number; year: number };
+  mainFinancialScore: number;
+  mainCulturalScore: number;
+  mainQuarterlyReturn: number | null;
+  peers: Array<{
+    ticker: string;
+    companyName: string;
+    quarterlyReturn: number | null;
+    financialScore: number;
+    culturalScore: number;
+    topHeadline?: string;
+  }>;
+}
+
+function buildPeerSynthesisPrompt(input: PeerSynthesisInput): string {
+  const { mainTicker, mainCompany, timeframe, mainFinancialScore, mainCulturalScore, mainQuarterlyReturn, peers } = input;
+  const fmt = (v: number | null) => v != null ? `${v > 0 ? "+" : ""}${v.toFixed(1)}%` : "N/A";
+
+  const peerLines = peers.map(p =>
+    `- ${p.companyName} (${p.ticker}): return ${fmt(p.quarterlyReturn)}, financial score ${p.financialScore}/100, cultural score ${p.culturalScore}/100${p.topHeadline ? `, top headline: "${p.topHeadline}"` : ""}`
+  ).join("\n");
+
+  return `You are a financial analyst. Write exactly 2–3 sentences comparing ${mainCompany} (${mainTicker}) to its sector peers during Q${timeframe.quarter} ${timeframe.year}. Past tense only. No hedging. No investment advice.
+
+${mainCompany} (${mainTicker}): quarterly return ${fmt(mainQuarterlyReturn)}, financial score ${mainFinancialScore}/100, cultural score ${mainCulturalScore}/100
+
+Peers:
+${peerLines}
+
+Focus on what differentiated ${mainCompany}: whether it outperformed or underperformed, and why, grounded in the numbers above. Mention at least one peer by name.
+
+Return JSON only: {"narrative": "..."}`.trim();
+}
+
 function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
   return {
     name: "yahoo-metrics-dev-endpoint",
@@ -338,6 +377,147 @@ function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
           res.end(stdout);
         } catch (err) {
           const detail = err instanceof Error ? err.message : "Failed to fetch agent data";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
+      // ── /peer-data: lightweight per-peer yfinance + Tavily ──────────
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/peer-data")) return next();
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        const url = new URL(req.url, "http://localhost");
+        const ticker  = (url.searchParams.get("ticker")  ?? "").toUpperCase();
+        const company = (url.searchParams.get("company") ?? "").trim();
+        const quarter = Number(url.searchParams.get("quarter"));
+        const year    = Number(url.searchParams.get("year"));
+
+        if (!ticker || !company || !Number.isInteger(quarter) || !Number.isInteger(year)) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Missing or invalid ticker/company/quarter/year" }));
+          return;
+        }
+
+        const cacheKey = `peer:${ticker}:${quarter}:${year}`;
+        const cached = peerCache.get(cacheKey);
+        if (cached && Date.now() - cached.ts < AGENT_CACHE_TTL_MS) {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("X-Cache", "HIT");
+          res.end(cached.data);
+          return;
+        }
+
+        try {
+          const { stdout } = await execFileAsync(
+            agentPythonBin,
+            [
+              peerDataScriptPath,
+              "--ticker",  ticker,
+              "--company", company,
+              "--quarter", String(quarter),
+              "--year",    String(year),
+              "--groq-model", groqModel,
+            ],
+            {
+              cwd: __dirname,
+              maxBuffer: 2 * 1024 * 1024,
+              env: {
+                ...process.env,
+                TAVILY_API_KEY: runtimeKeys.tavilyApiKey,
+                GROQ_API_KEY:   runtimeKeys.groqApiKey,
+              },
+            }
+          );
+
+          peerCache.set(cacheKey, { data: stdout, ts: Date.now() });
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(stdout);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Failed to fetch peer data";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
+      // ── /peer-synthesis: Groq comparative paragraph ──────────────────
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/peer-synthesis")) return next();
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        try {
+          const raw = (await readJsonBody(req)) as Partial<PeerSynthesisInput>;
+          const body: PeerSynthesisInput = {
+            mainTicker:          raw.mainTicker ?? "",
+            mainCompany:         raw.mainCompany ?? "",
+            timeframe:           raw.timeframe ?? { quarter: 1, year: 2020 },
+            mainFinancialScore:  raw.mainFinancialScore ?? 50,
+            mainCulturalScore:   raw.mainCulturalScore ?? 50,
+            mainQuarterlyReturn: raw.mainQuarterlyReturn ?? null,
+            peers:               raw.peers ?? [],
+          };
+
+          if (!body.mainTicker || body.peers.length === 0) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ detail: "Missing mainTicker or peers" }));
+            return;
+          }
+
+          const prompt = buildPeerSynthesisPrompt(body);
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${runtimeKeys.groqApiKey}`,
+            },
+            body: JSON.stringify({
+              model: groqModel,
+              temperature: 0.3,
+              max_tokens: 350,
+              response_format: { type: "json_object" },
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a data-grounded financial analyst. Return strict JSON only.",
+                },
+                { role: "user", content: prompt },
+              ],
+            }),
+          });
+
+          if (!groqRes.ok) {
+            const detail = await groqRes.text().catch(() => "");
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ detail: `Groq error ${groqRes.status}: ${detail}` }));
+            return;
+          }
+
+          const json = await groqRes.json();
+          const text: string | undefined = json?.choices?.[0]?.message?.content;
+          if (!text) throw new Error("Groq returned empty content");
+          const parsed = parseJsonContent(text) as { narrative?: string };
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ narrative: parsed.narrative ?? "" }));
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Peer synthesis failed";
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ detail }));
