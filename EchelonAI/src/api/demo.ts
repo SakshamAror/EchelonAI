@@ -1,7 +1,7 @@
 // READ instructions.txt before editing this file.
 // Hardcoded demo fixtures. Demo companies: Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023
 
-import type { AnalysisRequest, AnalysisResult, FinancialMetrics, ReasoningPoint, SecFiling, TimeFrame } from "@/types";
+import type { AnalysisRequest, AnalysisResult, FinancialMetrics, ReasoningPoint, SecFiling, Source, TimeFrame } from "@/types";
 
 export const DEMO_RESULTS: Record<string, AnalysisResult> = {
   // ─── NIKE Q3 2024 ─────────────────────────────────────────────────────────
@@ -300,11 +300,25 @@ interface LlmReasoningItem {
   point: string;
   metricCitations: DisplayedMetricKey[];
   culturalSignalCitations?: number[];
+  filingHighlightCitations?: number[];
 }
 
 interface LlmSynthesisResponse {
   summary: string;
   reasoning: LlmReasoningItem[];
+}
+
+function detailAnchorFromLlmItem(item: LlmReasoningItem): string | undefined {
+  if ((item.filingHighlightCitations?.length ?? 0) > 0) {
+    return `filing-highlight-${item.filingHighlightCitations![0]}`;
+  }
+  if ((item.culturalSignalCitations?.length ?? 0) > 0) {
+    return `cultural-signal-${item.culturalSignalCitations![0]}`;
+  }
+  if ((item.metricCitations?.length ?? 0) > 0) {
+    return `metric-${item.metricCitations![0]}`;
+  }
+  return undefined;
 }
 
 function quarterLabel(timeframe: TimeFrame): string {
@@ -526,7 +540,14 @@ function buildFinancialOnlySynthesis(
     const text = context
       ? `${METRIC_LABEL[key]} stood at ${valueText}, ${context}`
       : `${METRIC_LABEL[key]} was ${valueText}.`;
-    return { category: "financial", text, sources: [] };
+    const neg = /\b(fell|fall|decline|drop|loss|weak|negative|contracted)\b/i.test(text);
+    return {
+      category: "financial" as const,
+      text,
+      direction: neg ? ("neg" as const) : ("pos" as const),
+      sources: [],
+      detailAnchor: `metric-${key}`,
+    };
   });
 
   return { summary: summaryParts.join(" "), reasoning };
@@ -656,6 +677,8 @@ function enrichSummary(summary: string): string {
   return normalizeUnavailableWording(summary).trim();
 }
 
+const FILING_EXCERPT_MAX_LEN = 1500;
+
 async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmSynthesisResponse | null; error: string | null }> {
   try {
     const displayedMetrics = DISPLAYED_METRIC_KEYS.reduce<Record<string, number | null>>((acc, key) => {
@@ -671,6 +694,27 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
       source: signal.source,
     }));
 
+    const filingTexts = (result.secFiling?.highlights ?? [])
+      .map((t) => (typeof t === "string" ? t.trim() : ""))
+      .filter(Boolean);
+    const displayedFilingHighlights = filingTexts.map((text, i) => ({
+      index: i + 1,
+      text: text.length > FILING_EXCERPT_MAX_LEN ? `${text.slice(0, FILING_EXCERPT_MAX_LEN)}…` : text,
+    }));
+    const secFilingPayload =
+      result.secFiling &&
+      (displayedFilingHighlights.length > 0 ||
+        (result.secFiling.documentUrl ?? "").trim() ||
+        (result.secFiling.filingUrl ?? "").trim())
+        ? {
+            documentUrl: result.secFiling.documentUrl ?? "",
+            filingUrl: result.secFiling.filingUrl ?? "",
+            filingDate: result.secFiling.filingDate ?? "",
+            periodOfReport: result.secFiling.periodOfReport ?? "",
+            companyName: result.secFiling.companyName ?? "",
+          }
+        : null;
+
     const res = await fetch("/alpha-synthesis", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -681,12 +725,14 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
         displayedMetricKeys: DISPLAYED_METRIC_KEYS,
         displayedMetrics,
         displayedCulturalSignals,
+        displayedFilingHighlights,
+        secFiling: secFilingPayload,
         scores: {
           financialScore: result.financialScore,
           culturalScore: result.culturalScore,
           echelonScore: result.alphaScore,
         },
-        priceDeltaPercent: result.forumChart?.deltaPrice ?? null,
+        priceDeltaPercent: result.forumChart?.deltaPrice ?? undefined,
       }),
     });
 
@@ -700,6 +746,7 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
       return { payload: null, error: "LLM returned invalid synthesis payload" };
     }
 
+    const filingCount = filingTexts.length;
     const seenMetricKeys = new Set<DisplayedMetricKey>();
     const seenSignalIdx = new Set<number>();
     const validReasoning: LlmReasoningItem[] = [];
@@ -715,12 +762,28 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
       const culturalSignalCitations = Array.isArray(raw.culturalSignalCitations)
         ? raw.culturalSignalCitations.filter((idx): idx is number => Number.isInteger(idx) && idx >= 1 && idx <= result.culturalSignals.length)
         : [];
-      if (metricCitations.length === 0 && culturalSignalCitations.length === 0) continue;
+      const filingHighlightCitations = Array.isArray(raw.filingHighlightCitations)
+        ? raw.filingHighlightCitations.filter(
+            (idx): idx is number => Number.isInteger(idx) && idx >= 1 && idx <= filingCount
+          )
+        : [];
+
+      const nKind =
+        (metricCitations.length > 0 ? 1 : 0) +
+        (culturalSignalCitations.length > 0 ? 1 : 0) +
+        (filingHighlightCitations.length > 0 ? 1 : 0);
+      if (nKind !== 1) continue;
+
       const point = normalizeUnavailableWording(raw.point.trim());
       if (isUnavailableNarrative(point)) continue;
       metricCitations.forEach((k) => seenMetricKeys.add(k));
       culturalSignalCitations.forEach((idx) => seenSignalIdx.add(idx));
-      validReasoning.push({ point, metricCitations, culturalSignalCitations });
+      validReasoning.push({
+        point,
+        metricCitations,
+        culturalSignalCitations,
+        filingHighlightCitations,
+      });
     }
 
     if (validReasoning.length === 0) {
@@ -740,6 +803,7 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
         point,
         metricCitations: [key],
         culturalSignalCitations: [],
+        filingHighlightCitations: [],
       });
     }
 
@@ -753,13 +817,14 @@ async function getGroqSynthesis(result: AnalysisResult): Promise<{ payload: LlmS
         point: sig.text,
         metricCitations: [],
         culturalSignalCitations: [idx],
+        filingHighlightCitations: [],
       });
     }
 
     return {
       payload: {
         summary: enrichSummary(payload.summary),
-        reasoning: validReasoning.slice(0, 10),
+        reasoning: validReasoning.slice(0, 12),
       },
       error: null,
     };
@@ -907,27 +972,52 @@ async function buildLiveResultFromBase(
     }
 
     const NEG_FINANCIAL_WORDS = /\b(fell|fall|decline[ds]?|drop[ps]?|dropped|loss|losses|weak|miss(?:ed)?|below|disappoint|shrink|shrank|cut|cuts|negative|lower(?:ed)?|compress(?:ed)?|concern|deteriorat|worsen|contraction|contracted)\b/i;
+    const sec = resultWithLiveMetrics.secFiling;
+    const filingSource = (): Source[] => {
+      if (!sec) return [];
+      const url = (sec.documentUrl || sec.filingUrl || "").trim();
+      if (!url) return [];
+      const title =
+        sec.periodOfReport || sec.filingDate
+          ? `10-Q · period ${sec.periodOfReport || sec.filingDate}`
+          : `10-Q · ${sec.companyName || resultWithLiveMetrics.ticker}`;
+      return [
+        {
+          title,
+          url: url || "#",
+          date: sec.filingDate || sec.periodOfReport || "",
+          type: "filing" as const,
+        },
+      ];
+    };
+
     const mappedReasoning: ReasoningPoint[] = llm.reasoning
       .filter((item) => !isUnavailableNarrative(item.point))
       .map((item) => {
-        const isCultural = (item.culturalSignalCitations?.length ?? 0) > 0;
-        const category: ReasoningPoint["category"] = isCultural ? "cultural" : "financial";
+        const hasFiling = (item.filingHighlightCitations?.length ?? 0) > 0;
+        const hasCultural = !hasFiling && (item.culturalSignalCitations?.length ?? 0) > 0;
+        const category: ReasoningPoint["category"] = hasFiling ? "filing" : hasCultural ? "cultural" : "financial";
 
         let direction: ReasoningPoint["direction"];
-        if (isCultural) {
+        if (hasCultural) {
           const citations: number[] = item.culturalSignalCitations ?? [];
           const hasNegSignal = citations.some((idx) => {
             const signal = resultWithLiveMetrics.culturalSignals[idx - 1];
             return signal?.sentiment === "neg";
           });
-          // Also check text directly — catches cases where LLM cites positive signals
-          // but the bullet text itself describes a negative outcome
           direction = (hasNegSignal || NEG_FINANCIAL_WORDS.test(item.point)) ? "neg" : "pos";
         } else {
           direction = NEG_FINANCIAL_WORDS.test(item.point) ? "neg" : "pos";
         }
 
-        return { text: item.point, category, direction, sources: [] };
+        const sources: Source[] = category === "filing" ? filingSource() : [];
+        return {
+          text: item.point,
+          category,
+          direction,
+          sources,
+          detailAnchor: detailAnchorFromLlmItem(item),
+        };
       });
 
     return {

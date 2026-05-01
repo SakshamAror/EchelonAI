@@ -102,6 +102,8 @@ export interface ReasoningPoint {
   category: "cultural" | "financial" | "filing";
   direction?: "pos" | "neg";
   sources: Source[];
+  /** If set, jump-to-detail scrolls to this element id (e.g. metric-returnOnEquity). */
+  detailAnchor?: string;
 }
 
 export interface AnalysisResult {

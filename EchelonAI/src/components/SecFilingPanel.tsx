@@ -82,6 +82,8 @@ export default function SecFilingPanel({ filing, error, quarter, year }: Props) 
           {filing.highlights.map((h, i) => (
             <div
               key={i}
+              id={`filing-highlight-${i + 1}`}
+              className="echelon-jump-target"
               style={{
                 display: "flex",
                 alignItems: "flex-start",

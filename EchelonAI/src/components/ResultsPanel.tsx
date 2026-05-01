@@ -2,7 +2,7 @@
 // Composes all result sections. Layout: ScoreCard → Synthesis → Chart+Cultural → Metrics → SEC → Sources.
 // To add a new section: create a component and import here.
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AnalysisResult } from "@/types";
 import ScoreCard from "./ScoreCard";
 import ForumChart from "./ForumChart";
@@ -22,20 +22,23 @@ const BULLETS_DEFAULT_SHOWN = 3;
 function bulletColor(category: string, direction?: string): string {
   if (category === "cultural") return direction === "neg" ? "#fca5a5" : "#86efac";
   if (category === "financial") return direction === "neg" ? "#ff4c4c" : "#3ddc84";
+  if (category === "filing") return direction === "neg" ? "#fdba74" : "#fde047";
   return "var(--accent)";
 }
 function bulletBg(category: string, direction?: string): string {
   if (category === "cultural") return direction === "neg" ? "rgba(252,165,165,0.08)" : "rgba(134,239,172,0.08)";
   if (category === "financial") return direction === "neg" ? "rgba(255,76,76,0.08)" : "rgba(61,220,132,0.08)";
+  if (category === "filing") return direction === "neg" ? "rgba(253,186,116,0.1)" : "rgba(253,224,71,0.1)";
   return "rgba(245,166,35,0.08)";
 }
 function bulletLabel(category: string, direction?: string): string {
   if (category === "cultural") return direction === "neg" ? "cultural · negative" : "cultural · positive";
   if (category === "financial") return direction === "neg" ? "financial · negative" : "financial · positive";
+  if (category === "filing") return direction === "neg" ? "filing · negative" : "filing · positive";
   return category;
 }
 
-function AlphaSynthesis({ result }: { result: AnalysisResult }) {
+function AlphaSynthesis({ result, onJumpToDetail }: { result: AnalysisResult; onJumpToDetail: (anchorId: string) => void }) {
   const [expanded,  setExpanded]  = useState(false);
   const [copied,    setCopied]    = useState(false);
 
@@ -135,6 +138,26 @@ function AlphaSynthesis({ result }: { result: AnalysisResult }) {
                     <p style={{ fontSize: 12, lineHeight: 1.65, color: "var(--text)", margin: 0 }}>
                       {pt.text}
                     </p>
+                    {pt.detailAnchor && (
+                      <button
+                        type="button"
+                        onClick={() => onJumpToDetail(pt.detailAnchor!)}
+                        style={{
+                          marginTop: 8,
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          fontSize: 10,
+                          letterSpacing: "0.12em",
+                          textTransform: "uppercase",
+                          color: "var(--accent)",
+                          fontFamily: "'DM Mono', monospace",
+                        }}
+                      >
+                        View in detail ↓
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -187,6 +210,36 @@ function AlphaSynthesis({ result }: { result: AnalysisResult }) {
 
 export default function ResultsPanel({ result }: Props) {
   const periodLabel = quarterLabel(result.timeframe.quarter, result.timeframe.year);
+  const [expandCulturalForDetail, setExpandCulturalForDetail] = useState(false);
+
+  useEffect(() => {
+    setExpandCulturalForDetail(false);
+  }, [result.ticker, result.timeframe.quarter, result.timeframe.year]);
+
+  const jumpToDetail = useCallback((anchorId: string) => {
+    if (anchorId.startsWith("cultural-signal-")) {
+      setExpandCulturalForDetail(true);
+    }
+    const scroll = () => {
+      const el = document.getElementById(anchorId);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const prevBox = el.style.boxShadow;
+      const prevTr = el.style.transition;
+      el.style.transition = "box-shadow 0.35s ease";
+      el.style.boxShadow = "0 0 0 2px var(--accent), 0 0 20px rgba(245,166,35,0.2)";
+      window.setTimeout(() => {
+        el.style.boxShadow = prevBox;
+        el.style.transition = prevTr;
+      }, 1600);
+    };
+    if (anchorId.startsWith("cultural-signal-")) {
+      requestAnimationFrame(() => requestAnimationFrame(scroll));
+    } else {
+      scroll();
+    }
+  }, []);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 80 }}>
 
@@ -194,12 +247,16 @@ export default function ResultsPanel({ result }: Props) {
       <ScoreCard result={result} error={result.dataErrors?.scorecard} />
 
       {/* 2 — Synthesis (LLM summary + signal bullets) */}
-      <AlphaSynthesis result={result} />
+      <AlphaSynthesis result={result} onJumpToDetail={jumpToDetail} />
 
       {/* 3 — Chart + Cultural signals side by side */}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }} className="fade-up fade-up-3">
         <ForumChart data={result.forumChart} error={result.dataErrors?.forumChart} />
-        <CulturalSignals signals={result.culturalSignals} error={result.dataErrors?.cultural} />
+        <CulturalSignals
+          signals={result.culturalSignals}
+          error={result.dataErrors?.cultural}
+          expandForDeepLink={expandCulturalForDetail}
+        />
       </div>
 
       {/* 4 — Financial metrics */}

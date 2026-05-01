@@ -343,4 +343,9 @@
       display: none;
     }
   }
+
+  /* Scroll offset for Key Signals → jump to detail */
+  .echelon-jump-target {
+    scroll-margin-top: 5.5rem;
+  }
 }

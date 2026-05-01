@@ -5,7 +5,12 @@
 import { useState } from "react";
 import type { CulturalSignal } from "@/types";
 
-interface Props { signals: CulturalSignal[]; error?: string }
+interface Props {
+  signals: CulturalSignal[];
+  error?: string;
+  /** When true, show every signal row (used when jumping from Key Signals). */
+  expandForDeepLink?: boolean;
+}
 
 const SENTIMENT_STYLES: Record<string, { dot: string; border: string; titleColor: string; bodyColor: string }> = {
   pos: {
@@ -58,7 +63,7 @@ function splitText(raw: string): { title: string; body: string } {
   return { title: clean.slice(0, 120), body: "" };
 }
 
-export default function CulturalSignals({ signals, error }: Props) {
+export default function CulturalSignals({ signals, error, expandForDeepLink = false }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   if (error) {
@@ -79,24 +84,28 @@ export default function CulturalSignals({ signals, error }: Props) {
     );
   }
 
-  const sorted = [...signals]
-    .sort((a, b) => (SENTIMENT_ORDER[a.sentiment] ?? 2) - (SENTIMENT_ORDER[b.sentiment] ?? 2))
-    .slice(0, 10);
+  const indexed = signals.map((sig, idx) => ({ sig, signalIndex1: idx + 1 }));
+  const sorted = [...indexed].sort(
+    (a, b) => (SENTIMENT_ORDER[a.sig.sentiment] ?? 2) - (SENTIMENT_ORDER[b.sig.sentiment] ?? 2)
+  );
 
   const INITIAL_SHOW = 2;
-  const visible = expanded ? sorted : sorted.slice(0, INITIAL_SHOW);
+  const showAll = expanded || expandForDeepLink;
+  const visible = showAll ? sorted : sorted.slice(0, INITIAL_SHOW);
   const hiddenCount = sorted.length - INITIAL_SHOW;
 
   return (
     <div className="panel-box">
       <div className="panel-label">Cultural Signals</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {visible.map((sig, i) => {
+        {visible.map(({ sig, signalIndex1 }) => {
           const style = SENTIMENT_STYLES[sig.sentiment] ?? SENTIMENT_STYLES.neutral;
           const { title, body } = splitText(sig.text);
           return (
             <div
-              key={i}
+              id={`cultural-signal-${signalIndex1}`}
+              className="echelon-jump-target"
+              key={signalIndex1}
               style={{
                 display: "flex",
                 gap: 12,

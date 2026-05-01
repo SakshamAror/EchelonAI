@@ -195,7 +195,7 @@ function directionalHighlight(metric: MetricDefinition, value: number): "green" 
   }
 }
 
-function MetricCell({ metric, value }: { metric: MetricDefinition; value: number }) {
+function MetricCell({ metric, value, domId }: { metric: MetricDefinition; value: number; domId?: string }) {
   const highlight = directionalHighlight(metric, value);
 
   const borderColor = highlight === "green" ? "rgba(61,220,132,0.4)" : highlight === "red" ? "rgba(255,76,76,0.4)" : NEUTRAL_TONE.border;
@@ -204,7 +204,11 @@ function MetricCell({ metric, value }: { metric: MetricDefinition; value: number
   const labelColor = highlight === "green" ? "#7ecfa8" : highlight === "red" ? "#d88080" : NEUTRAL_TONE.label;
 
   return (
-    <div style={{ padding: 14, border: `1px solid ${borderColor}`, background: bgColor, position: "relative" }}>
+    <div
+      id={domId}
+      className={domId ? "echelon-jump-target" : undefined}
+      style={{ padding: 14, border: `1px solid ${borderColor}`, background: bgColor, position: "relative" }}
+    >
       <p style={{ fontSize: 9, letterSpacing: "0.2em", color: labelColor, textTransform: "uppercase", marginBottom: 8 }}>
         {metric.label}
       </p>
@@ -308,7 +312,12 @@ export default function MetricsPanel({ metrics, periodLabel, error }: Props) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 {rows.map((row) => (
-                  <MetricCell key={row.def.key} metric={row.def} value={row.value} />
+                  <MetricCell
+                    key={row.def.key}
+                    metric={row.def}
+                    value={row.value}
+                    domId={`metric-${String(row.def.key)}`}
+                  />
                 ))}
               </div>
             </div>

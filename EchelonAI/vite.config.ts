@@ -64,6 +64,15 @@ interface AlphaSynthesisInput {
     text: string;
     source: string;
   }>;
+  /** 1-based indices; MD&A excerpts from 10-Q (empty when no filing text). */
+  displayedFilingHighlights: Array<{ index: number; text: string }>;
+  secFiling: {
+    documentUrl: string;
+    filingUrl: string;
+    filingDate: string;
+    periodOfReport: string;
+    companyName: string;
+  } | null;
   scores?: {
     financialScore: number;
     culturalScore: number;
@@ -82,14 +91,32 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 function buildSynthesisPrompt(input: AlphaSynthesisInput) {
+  const hasFiling = input.displayedFilingHighlights.length > 0;
   const schema = {
     summary: "string",
     reasoning: [
       {
-        point: "string",
+        point: "tied to financial metrics only",
         metricCitations: ["returnOnEquity"],
-        culturalSignalCitations: [1],
+        culturalSignalCitations: [] as number[],
+        filingHighlightCitations: [] as number[],
       },
+      {
+        point: "tied to news/cultural signals only",
+        metricCitations: [] as string[],
+        culturalSignalCitations: [1],
+        filingHighlightCitations: [] as number[],
+      },
+      ...(hasFiling
+        ? [
+            {
+              point: "tied to SEC MD&A excerpt only — paraphrase DATA.displayedFilingHighlights only",
+              metricCitations: [] as string[],
+              culturalSignalCitations: [] as number[],
+              filingHighlightCitations: [1],
+            },
+          ]
+        : []),
     ],
   };
 
@@ -109,32 +136,46 @@ function buildSynthesisPrompt(input: AlphaSynthesisInput) {
     .map(([k, v]) => `${v} ${k === "pos" ? "positive" : k === "neg" ? "negative" : "neutral"}`)
     .join(", ");
 
+  const summaryStructure = hasFiling
+    ? `1) summary: 7-10 sentences split into 3-4 paragraphs, each separated by a literal "\\n\\n". Structure:
+   - Paragraph 1 (2-3 sentences): What happened to the stock overall — price direction, magnitude, and the single most dominant driver.
+   - Paragraph 2 (2-3 sentences): The most impactful cultural signals. Name each signal by what it was about, quote or paraphrase its core claim, and explain concretely why and how it moved investor sentiment or the stock price.
+   - Paragraph 3 (2 sentences): Management discussion in the 10-Q excerpts (DATA.displayedFilingHighlights only). Paraphrase the most material themes; tie each to how investors likely read results, risks, or outlook. Do not invent claims not supported by those excerpts.
+   - Paragraph 4 (2-3 sentences): The most revealing financial metrics. State their actual values, compare to typical benchmarks, and explain what each revealed about the business and how it shaped price action or valuation.`
+    : `1) summary: 6-9 sentences split into 2-3 paragraphs, each separated by a literal "\\n\\n". Structure:
+   - Paragraph 1 (2-3 sentences): What happened to the stock overall — price direction, magnitude, and the single most dominant driver.
+   - Paragraph 2 (2-3 sentences): The most impactful cultural signals. Name each signal by what it was about, quote or paraphrase its core claim, and explain concretely why and how it moved investor sentiment or the stock price.
+   - Paragraph 3 (2-3 sentences): The most revealing financial metrics. State their actual values, compare to typical benchmarks, and explain what each revealed about the business and how it shaped price action or valuation.`;
+
+  const filingReasoningRule = hasFiling
+    ? `   - When DATA.displayedFilingHighlights is non-empty: include 1-2 reasoning items that cite ONLY filingHighlightCitations (metricCitations and culturalSignalCitations must be []). Each must paraphrase substantive content from the cited excerpt index.`
+    : `   - When DATA.displayedFilingHighlights is empty: every filingHighlightCitations array must be []. Do not write filing/SEC bullets.`;
+
   return `
 You are a financial analyst writing a retrospective for ${input.companyName} (${input.ticker}), Q${input.timeframe.quarter} ${input.timeframe.year}.
 ${priceContext} ${scoreContext}
 Cultural signal mix: ${sentimentSummary || "none"}.
 
-Return strict JSON matching this shape exactly:
+Return strict JSON. Every reasoning object must include all three citation arrays metricCitations, culturalSignalCitations, filingHighlightCitations (use [] for unused types). Example shape:
 ${JSON.stringify(schema, null, 2)}
 
 RULES — no exceptions:
-1) summary: 6-9 sentences split into 2-3 paragraphs, each separated by a literal "\\n\\n". Structure:
-   - Paragraph 1 (2-3 sentences): What happened to the stock overall — price direction, magnitude, and the single most dominant driver.
-   - Paragraph 2 (2-3 sentences): The most impactful cultural signals. Name each signal by what it was about, quote or paraphrase its core claim, and explain concretely why and how it moved investor sentiment or the stock price.
-   - Paragraph 3 (2-3 sentences): The most revealing financial metrics. State their actual values, compare to typical benchmarks, and explain what each revealed about the business and how it shaped price action or valuation.
+${summaryStructure}
    Past tense only. No hedging ("may", "could", "might"), no filler, no investment advice, no meta-commentary.
 2) reasoning: 5-8 items, ordered most → least impactful. Each point is 1-2 sentences: state the fact from DATA and its direct market implication. Terse and factual.
    - CRITICAL: every bullet must have a definitive positive OR negative market impact. If the direction is ambiguous or neutral, omit the bullet entirely.
    - NEVER use hedging words: "may", "might", "could", "perhaps", "possibly", "not enough", "may not have". State only definitive facts.
    - NEVER write bullets about metrics that are null, unavailable, or N/A.
-3) Citation segregation — CRITICAL: financial metric bullets must ONLY cite metricCitations (set culturalSignalCitations to []). Cultural/news bullets must ONLY cite culturalSignalCitations (set metricCitations to []). NEVER mix both in one bullet.
+${filingReasoningRule}
+3) Citation segregation — CRITICAL: each reasoning item must use EXACTLY ONE citation type — either non-empty metricCitations, OR non-empty culturalSignalCitations, OR non-empty filingHighlightCitations. The other two arrays must be []. NEVER mix types in one bullet.
 4) Cultural signal sentiment key: "pos" = bullish coverage, "neg" = bearish coverage, "neutral" = ambiguous.
 5) metricCitations: only keys present in DATA.displayedMetricKeys.
 6) culturalSignalCitations: only indices from DATA.displayedCulturalSignals[].index.
-7) Every reasoning item must cite ≥1 metric OR ≥1 signal.
-8) Prioritise the 3-5 metrics with the most unusual or market-moving values (e.g., extreme growth, margin collapse, valuation outlier). Skip metrics with unremarkable readings unless they directly explain price action. Do not manufacture bullets for routine or mid-range values.
-9) Past tense only: "reported", "fell", "posted", "showed". Never "is", "has", "remains".
-10) Use only DATA below — no outside knowledge, no invented numbers.
+7) filingHighlightCitations: only indices from DATA.displayedFilingHighlights[].index.
+8) Every reasoning item must cite ≥1 metric, OR ≥1 cultural signal, OR ≥1 filing highlight (when highlights exist in DATA).
+9) Prioritise the 3-5 metrics with the most unusual or market-moving values (e.g., extreme growth, margin collapse, valuation outlier). Skip metrics with unremarkable readings unless they directly explain price action. Do not manufacture bullets for routine or mid-range values.
+10) Past tense only: "reported", "fell", "posted", "showed", "stated". Never "is", "has", "remains".
+11) Use only DATA below — no outside knowledge, no invented numbers, no filing facts beyond DATA.displayedFilingHighlights.
 
 DATA:
 ${JSON.stringify(input, null, 2)}
@@ -438,7 +479,19 @@ function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
         }
 
         try {
-          const body = (await readJsonBody(req)) as AlphaSynthesisInput;
+          const raw = (await readJsonBody(req)) as Partial<AlphaSynthesisInput>;
+          const body: AlphaSynthesisInput = {
+            ticker: raw.ticker ?? "",
+            companyName: raw.companyName ?? "",
+            timeframe: raw.timeframe ?? { quarter: 1, year: 2020 },
+            displayedMetricKeys: raw.displayedMetricKeys ?? [],
+            displayedMetrics: raw.displayedMetrics ?? {},
+            displayedCulturalSignals: raw.displayedCulturalSignals ?? [],
+            displayedFilingHighlights: raw.displayedFilingHighlights ?? [],
+            secFiling: raw.secFiling ?? null,
+            scores: raw.scores,
+            priceDeltaPercent: raw.priceDeltaPercent,
+          };
           const result = await callGroqSynthesis(body, runtimeKeys.groqApiKey, groqModel);
           res.statusCode = 200;
           res.setHeader("Content-Type", "application/json");
