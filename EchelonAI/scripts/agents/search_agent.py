@@ -462,7 +462,81 @@ def format_articles_for_llm(articles: List[Dict[str, object]]) -> str:
         content = str(article.get("content", "")).strip()
         lines.append(f"{idx}. {title} - {url} - {content}")
     return "\n".join(lines)
+def _finnhub_company_news(ticker: str, year: int, month: int) -> List[Dict[str, object]]:
+    """
+    Fallback news source when Tavily fails, is unavailable, or returns
+    nothing. Reshapes Finnhub's company news into the same article
+    dict shape used elsewhere in this file, so compute_social_score
+    and everything downstream works unchanged.
+    """
+    try:
+        import finnhub
+    except ImportError:
+        return []
 
+    api_key = os.getenv("FINNHUB_API_KEY")
+    if not api_key or not ticker:
+        return []
+
+    last_day = calendar.monthrange(year, month)[1]
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{last_day:02d}"
+    month_name = _month_name(month)
+
+    try:
+        client = finnhub.Client(api_key=api_key)
+        raw = client.company_news(ticker, _from=start_date, to=end_date)
+    except Exception:
+        return []
+
+    if not raw:
+        return []
+
+    articles: List[Dict[str, object]] = []
+    for r in raw[:10]:
+        title = (r.get("headline") or "").strip()
+        url = (r.get("url") or "").strip()
+        content = (r.get("summary") or "").strip()
+        if len(content) > 800:
+            content = content[:800].rstrip()
+
+        score = _score_article(title, content, url, month_name, year)
+        sentiment = _classify_sentiment(f"{title} {content}")
+        outlet = (r.get("source") or "").strip() or _outlet_name_from_url(url)
+        ts = r.get("datetime")
+        published_date = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d") if ts else ""
+
+        articles.append(
+            {
+                "title": title,
+                "url": url,
+                "content": content,
+                "relevance_score": score,
+                "sentiment": sentiment,
+                "outlet": outlet,
+                "published_date": published_date,
+            }
+        )
+
+    articles.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+    return articles[:10]
+
+
+def search_cultural_events_safe(term: str, year: int, month: int, ticker: str = "") -> List[Dict[str, object]]:
+    """
+    Same as search_cultural_events, but automatically falls back to
+    Finnhub's company news if Tavily fails or returns nothing. Call this
+    from fetch-agent-data.py instead of calling search_cultural_events
+    directly. The fallback only works if a ticker is provided (Finnhub's
+    news endpoint requires a real ticker symbol, not a free-text term).
+    """
+    try:
+        articles = search_cultural_events(term, year, month, ticker)
+        if articles:
+            return articles
+    except Exception:
+        pass
+    return _finnhub_company_news(ticker, year, month)
 
 if __name__ == "__main__":
     test_term = "Nvidia"
