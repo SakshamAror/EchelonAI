@@ -496,12 +496,20 @@ def get_financial_metrics(ticker: str, year: int, month: int) -> Dict[str, Any]:
     metrics: Dict[str, Any] = {}
 
     # ── Income-statement metrics ─────────────────────────────────────
-    revenue        = _sanitize_value(income_q.get("Total Revenue"))
-    gross_profit   = _sanitize_value(income_q.get("Gross Profit"))
-    op_income      = _sanitize_value(income_q.get("Operating Income"))
-    net_income     = _sanitize_value(income_q.get("Net Income"))
+    revenue          = _sanitize_value(income_q.get("Total Revenue"))
+    gross_profit     = _sanitize_value(income_q.get("Gross Profit"))
+    op_income        = _sanitize_value(income_q.get("Operating Income"))
+    net_income       = _sanitize_value(income_q.get("Net Income"))
+    interest_expense = _sanitize_value(income_q.get("Interest Expense")) or \
+                        _sanitize_value(income_q.get("Interest Expense Non Operating"))
 
-    metrics["totalRevenue"] = revenue
+            metrics["totalRevenue"]     = revenue
+            metrics["operatingIncome"]  = op_income
+            metrics["interestExpense"]  = interest_expense
+
+    # Interest Coverage Ratio — can the company cover interest from operating profit
+    if op_income is not None and interest_expense not in (None, 0):
+        metrics["interestCoverageRatio"] = op_income / abs(interest_expense)
     if revenue:
         if gross_profit  is not None: metrics["grossMargins"]     = gross_profit  / revenue
         if op_income     is not None: metrics["operatingMargins"] = op_income     / revenue
@@ -549,10 +557,15 @@ def get_financial_metrics(ticker: str, year: int, month: int) -> Dict[str, Any]:
     if qend_price and shares:
         metrics["marketCap"] = qend_price * shares
 
-        # Trailing P/E from TTM earnings
+       # Trailing P/E from TTM earnings
         ttm_eps = _compute_ttm_eps(income_df, income_col, shares)
         if ttm_eps and ttm_eps != 0.0:
             metrics["trailingPE"] = qend_price / ttm_eps
+
+            # PEG ratio — P/E divided by earnings growth rate (expressed as a percentage)
+            earnings_growth = metrics.get("earningsGrowth")
+            if earnings_growth is not None and earnings_growth > 0:
+                metrics["pegRatio"] = metrics["trailingPE"] / (earnings_growth * 100)
 
         # Price / Book from quarter-end balance sheet
         if total_equity:
@@ -619,6 +632,8 @@ def format_financials_for_llm(metrics: Dict[str, Any]) -> str:
         "priceToBook",
         "currentRatio",
         "quickRatio",
+        "pegRatio",
+        "interestCoverageRatio",
         "marketCap",
         "totalCash",
         "totalDebt",
@@ -666,7 +681,67 @@ def save_financials_to_json(
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
     return output_path
+def _finnhub_basic_financials(ticker: str) -> Dict[str, Any]:
+    """
+    Fallback source when yfinance fails (down, rate-limited, or returns
+    empty data). Uses Finnhub's Basic Financials endpoint.
 
+    Note: this returns CURRENT/TTM snapshot metrics, not point-in-time
+    historical data for the specific past quarter that get_financial_metrics
+    targets. It's an honest approximation used only when the primary
+    source has already failed — not a perfect historical match.
+    """
+    try:
+        import finnhub
+    except ImportError:
+        return {"error": "finnhub-python not installed (pip install finnhub-python)"}
+
+    api_key = os.getenv("FINNHUB_API_KEY")
+    if not api_key:
+        return {"error": f"ticker not found: {ticker} (yfinance failed, FINNHUB_API_KEY not set)"}
+
+    try:
+        client = finnhub.Client(api_key=api_key)
+        result = client.company_basic_financials(ticker, "all")
+        m = result.get("metric", {}) if isinstance(result, dict) else {}
+        if not m:
+            return {"error": f"ticker not found: {ticker}"}
+
+        metrics: Dict[str, Any] = {
+            "trailingPE": m.get("peBasicExclExtraTTM"),
+            "pegRatio": m.get("pegRatio"),
+            "enterpriseToEbitda": m.get("currentEv/freeCashFlowTTM"),
+            "returnOnEquity": m.get("roeTTM"),
+            "returnOnAssets": m.get("roaTTM"),
+            "debtToEquity": m.get("totalDebt/totalEquityQuarterly"),
+            "currentRatio": m.get("currentRatioQuarterly"),
+            "quickRatio": m.get("quickRatioQuarterly"),
+            "profitMargins": m.get("netProfitMarginTTM"),
+            "grossMargins": m.get("grossMarginTTM"),
+            "operatingMargins": m.get("operatingMarginTTM"),
+            "revenueGrowth": m.get("revenueGrowthTTMYoy"),
+            "earningsGrowth": m.get("epsGrowthTTMYoy"),
+            "beta": m.get("beta"),
+            "dividendYield": m.get("dividendYieldIndicatedAnnual"),
+            "marketCap": m.get("marketCapitalization"),
+        }
+        cleaned = _drop_null_fields(metrics)
+        cleaned["source"] = "finnhub_fallback"
+        return cleaned
+    except Exception as e:
+        return {"error": f"finnhub fallback failed for {ticker}: {e}"}
+
+
+def get_financial_metrics_safe(ticker: str, year: int, month: int) -> Dict[str, Any]:
+    """
+    Same as get_financial_metrics, but automatically falls back to Finnhub
+    if yfinance fails or returns an error. Call this from
+    fetch-agent-data.py instead of calling get_financial_metrics directly.
+    """
+    result = get_financial_metrics(ticker, year, month)
+    if not result or "error" in result:
+        return _finnhub_basic_financials(ticker)
+    return result
 
 if __name__ == "__main__":
     test_ticker = "AAPL"
