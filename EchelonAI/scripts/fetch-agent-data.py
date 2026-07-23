@@ -32,7 +32,7 @@ compute_social_score = None
 find_10q_filing = None
 
 try:
-    from financial_agent import get_financial_metrics as _get_financial_metrics  # type: ignore  # noqa: E402
+    from financial_agent import get_financial_metrics_safe as _get_financial_metrics  # type: ignore  # noqa: E402
 
     get_financial_metrics = _get_financial_metrics
 except Exception as exc:  # pragma: no cover - runtime environment dependent
@@ -43,7 +43,7 @@ try:
         compute_social_score as _compute_social_score,
     )
     from search_agent import (  # type: ignore  # noqa: E402
-        search_cultural_events as _search_cultural_events,
+        search_cultural_events_safe as _search_cultural_events,
     )
 
     compute_social_score = _compute_social_score
@@ -102,7 +102,9 @@ def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
 def normalize_metrics(raw: Dict[str, Any]) -> Dict[str, Optional[float]]:
     keep_keys = [
         "trailingPE",
+        "pegRatio",
         "enterpriseToEbitda",
+        "interestCoverageRatio",
         "returnOnEquity",
         "debtToEquity",
         "priceToBook",
@@ -128,7 +130,7 @@ def normalize_metrics(raw: Dict[str, Any]) -> Dict[str, Optional[float]]:
         "dividendRate",
         "dividendYield",
         "dividend_change",
-    ]
+        ]
     out: Dict[str, Optional[float]] = {}
     for key in keep_keys:
         out[key] = to_float(raw.get(key))
