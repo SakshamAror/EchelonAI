@@ -99,6 +99,16 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
 
+  // Prefill from the Portfolio tab's "analyze this ticker" deep-link
+  useEffect(() => {
+    const pending = localStorage.getItem("echelon_analyze_ticker");
+    if (pending) {
+      localStorage.removeItem("echelon_analyze_ticker");
+      setQuery(pending);
+      setShowResults(true);
+    }
+  }, []);
+
   useEffect(() => {
     function handleDocumentClick(event: MouseEvent) {
       if (!searchBoxRef.current) return;
@@ -373,10 +383,10 @@ export default function SearchForm({ onSubmit, loading, keysReady = true }: Prop
           type="submit"
           disabled={!canSubmit}
           style={{
-            background: canSubmit ? "var(--accent)" : "var(--border)",
-            color: canSubmit ? "#000" : "var(--text-muted)",
-            border: "none",
-            cursor: canSubmit ? "pointer" : "not-allowed",
+            background: canSubmit ? "var(--accent)" : !keysReady ? "rgba(245,166,35,0.12)" : "var(--surface-2)",
+            color: canSubmit ? "#000" : !keysReady ? "var(--accent)" : "var(--text-dim)",
+            border: canSubmit ? "none" : `1px solid ${!keysReady ? "var(--accent-dim)" : "var(--border)"}`,
+            cursor: canSubmit ? "pointer" : !keysReady ? "pointer" : "not-allowed",
             fontFamily: "'DM Mono', monospace",
             fontSize: 12,
             fontWeight: 500,

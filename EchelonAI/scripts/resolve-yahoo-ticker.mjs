@@ -56,11 +56,13 @@ function pickBestQuote(quotes) {
 
 async function main() {
   const { query } = parseArgs(process.argv.slice(2));
-  const result = await yf.search(query, {
-    quotesCount: 10,
-    newsCount: 0,
-    enableFuzzyQuery: true,
-  });
+  // validateResult:false — skip strict schema throw on malformed Yahoo quotes;
+  // pickBestQuote() filters bad entries.
+  const result = await yf.search(
+    query,
+    { quotesCount: 10, newsCount: 0, enableFuzzyQuery: true },
+    { validateResult: false }
+  );
 
   const best = pickBestQuote(result?.quotes ?? []);
   if (!best) {

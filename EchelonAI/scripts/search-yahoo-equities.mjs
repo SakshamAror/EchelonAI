@@ -68,15 +68,12 @@ async function main() {
   const { query } = parseArgs(process.argv.slice(2));
   const queryUpper = query.toUpperCase();
 
+  // validateResult:false — Yahoo intermittently returns one malformed quote (e.g. for
+  // "app") that fails the library's strict schema and would throw away ALL results.
+  // We skip validation and rely on isPublicListedEquity() to filter bad entries.
   const payload = await yf.search(
     query,
-    {
-      quotesCount: 30,
-      newsCount: 0,
-      enableFuzzyQuery: true,
-    },
-    // Don't let a single malformed result (Yahoo occasionally returns data that
-    // fails the library's schema) abort the entire search.
+    { quotesCount: 30, newsCount: 0, enableFuzzyQuery: true },
     { validateResult: false }
   );
 
