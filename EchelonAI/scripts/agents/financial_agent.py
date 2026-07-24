@@ -500,12 +500,13 @@ def get_financial_metrics(ticker: str, year: int, month: int) -> Dict[str, Any]:
     gross_profit     = _sanitize_value(income_q.get("Gross Profit"))
     op_income        = _sanitize_value(income_q.get("Operating Income"))
     net_income       = _sanitize_value(income_q.get("Net Income"))
-    interest_expense = _sanitize_value(income_q.get("Interest Expense")) or \
-                        _sanitize_value(income_q.get("Interest Expense Non Operating"))
+    interest_expense = _sanitize_value(income_q.get("Interest Expense"))
+    if interest_expense is None:
+        interest_expense = _sanitize_value(income_q.get("Interest Expense Non Operating"))
 
-            metrics["totalRevenue"]     = revenue
-            metrics["operatingIncome"]  = op_income
-            metrics["interestExpense"]  = interest_expense
+    metrics["totalRevenue"] = revenue
+    metrics["operatingIncome"]  = op_income
+    metrics["interestExpense"]  = interest_expense
 
     # Interest Coverage Ratio — can the company cover interest from operating profit
     if op_income is not None and interest_expense not in (None, 0):
