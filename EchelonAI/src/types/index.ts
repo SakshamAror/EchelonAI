@@ -65,10 +65,29 @@ export interface CulturalSignal {
   sentiment: "pos" | "neg" | "neutral";
   text: string;
   source: string;                          // e.g. "Reuters · Bloomberg"
+  title?: string;
+  url?: string;
+}
+
+export interface ChartArticleRef {
+  title: string;
+  url: string;
+  source: string;
+  sentiment: "pos" | "neg" | "neutral";
+  date: string;
+}
+
+export interface ChartEventPoint {
+  index: number;         // index into points[]
+  date: string;          // ISO date e.g. "2024-01-15"
+  isPeak: boolean;
+  isValley: boolean;
+  articles: ChartArticleRef[];
 }
 
 export interface ForumChartData {
   points: number[];              // normalized 0–100 values, ~11 data points
+  dates?: string[];              // ISO date for each chart point
   labels: string[];              // [start, mid, end] x-axis labels
   peakIndex: number;             // index into points[] where peak occurred
   peakLabel: string;             // human label, e.g. "Oct 14"
@@ -79,6 +98,7 @@ export interface ForumChartData {
   lowPrice?: number | null;
   benchmarkPoints?: number[];    // S&P 500 performance-rebased to same 0–100 scale
   benchmarkDelta?: number;       // S&P 500 % change over same period
+  eventPoints?: ChartEventPoint[];  // chart points with linked news articles
 }
 
 export interface Source {

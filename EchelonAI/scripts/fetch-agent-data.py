@@ -244,10 +244,22 @@ def build_price_chart(ticker: str, year: int, quarter: int) -> Tuple[Optional[Di
     def label(d: date) -> str:
         return d.strftime("%b %d")
 
+    peak_indices = [
+        i for i in range(1, n - 1)
+        if values[i] >= values[i - 1] and values[i] >= values[i + 1]
+    ]
+    valley_indices = [
+        i for i in range(1, n - 1)
+        if values[i] <= values[i - 1] and values[i] <= values[i + 1]
+    ]
+
     chart = {
         "points": points,
+        "dates": [d.isoformat() for d, _ in closes],
         "labels": [label(closes[0][0]), label(closes[mid_index][0]), label(closes[-1][0])],
         "peakIndex": peak_index,
+        "peakIndices": peak_indices,
+        "valleyIndices": valley_indices,
         "peakLabel": label(closes[peak_index][0]),
         "deltaPrice": round(delta, 2),
         "startPrice": round(start_price, 2),
@@ -389,7 +401,12 @@ def main() -> None:
             try:
                 batch = search_cultural_events(company, year, month, ticker=ticker)
                 if isinstance(batch, list):
-                    all_articles.extend(batch)
+                    mid_date = f"{year}-{month:02d}-15"
+                    for a in batch:
+                        if not str(a.get("published_date", "")).strip():
+                            a = dict(a)
+                            a["published_date"] = mid_date
+                        all_articles.append(a)
             except Exception as exc:
                 errors["cultural"] = f"{exc}"
                 break
@@ -425,6 +442,47 @@ def main() -> None:
     price_chart, price_error, delta_price = build_price_chart(ticker, year, quarter)
     if price_error:
         errors["priceChart"] = price_error
+
+    if price_chart and "dates" in price_chart:
+        from datetime import datetime as _dt
+        chart_dates = price_chart.get("dates", [])
+        peak_set = set(price_chart.get("peakIndices", []))
+        peak_set.add(price_chart.get("peakIndex", -1))
+        valley_set = set(price_chart.get("valleyIndices", []))
+        event_points = []
+        for i, chart_date_str in enumerate(chart_dates):
+            try:
+                chart_dt = _dt.fromisoformat(chart_date_str)
+            except Exception:
+                continue
+            nearby = []
+            for sig in cultural_signals:
+                sig_date_raw = sig.get("date", "")
+                if not sig_date_raw or len(sig_date_raw) < 10:
+                    continue
+                try:
+                    sig_dt = _dt.fromisoformat(sig_date_raw[:10])
+                    if abs((sig_dt - chart_dt).days) <= 7:
+                        nearby.append({
+                            "title": sig.get("title") or sig.get("text", "")[:100],
+                            "url": sig.get("url", ""),
+                            "source": sig.get("source", "Web"),
+                            "sentiment": sig.get("sentiment", "neutral"),
+                            "date": sig_date_raw[:10],
+                        })
+                except Exception:
+                    continue
+            is_peak = i in peak_set
+            is_valley = i in valley_set
+            if nearby or is_peak or is_valley:
+                event_points.append({
+                    "index": i,
+                    "date": chart_date_str,
+                    "isPeak": is_peak,
+                    "isValley": is_valley,
+                    "articles": nearby[:5],
+                })
+        price_chart["eventPoints"] = event_points
 
     financial_score = compute_financial_score(financial_metrics)
     alpha_score = round(clamp(0.65 * financial_score + 0.35 * cultural_score), 2)

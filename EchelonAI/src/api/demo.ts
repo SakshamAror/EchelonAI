@@ -401,6 +401,8 @@ function sanitizePriceChart(
       typeof chart.benchmarkDelta === "number" && Number.isFinite(chart.benchmarkDelta)
         ? chart.benchmarkDelta
         : undefined,
+    dates: Array.isArray((chart as any).dates) ? (chart as any).dates : undefined,
+    eventPoints: Array.isArray((chart as any).eventPoints) ? (chart as any).eventPoints : undefined,
   };
 }
 
