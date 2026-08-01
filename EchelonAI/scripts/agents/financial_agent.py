@@ -747,7 +747,7 @@ def get_financial_metrics_safe(ticker: str, year: int, month: int) -> Dict[str, 
 if __name__ == "__main__":
     test_ticker = "AAPL"
     test_year = 2024
-    test_month = 8
+    test_month = 9
     data = get_financial_metrics(test_ticker, test_year, test_month)
     output_file = save_financials_to_json(data)
     print(data)
