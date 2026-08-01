@@ -6,10 +6,19 @@
 .env
 .env.*
 !.env.example
+!*/.env.example
 
+EchelonAI/.env
+EchelonAI/.env.*
+backend/.env
+backend/.env.*
 frontend/.env
 frontend/.env.*
 
 __pycache__/
 *.pyc
-!frontend/.env.example
+
+node_modules/
+dist/
+.DS_Store
+.claude/

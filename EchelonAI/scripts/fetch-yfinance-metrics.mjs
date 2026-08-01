@@ -238,14 +238,16 @@ async function fetchFinancialMetrics({ ticker, quarter, year }) {
     "financialData",
   ];
 
+  // validateResult:false — Yahoo occasionally returns fields that fail the library's
+  // strict schema; skip the throw and rely on the null-safe num()/toDate() extractors.
   const [quoteSummary, chart] = await Promise.all([
-    yf.quoteSummary(ticker, { modules: summaryModules }),
+    yf.quoteSummary(ticker, { modules: summaryModules }, { validateResult: false }),
     yf.chart(ticker, {
       period1: prevBounds.start,
       period2: new Date(targetBounds.end.getTime() + 24 * 60 * 60 * 1000),
       interval: "1d",
       events: "div",
-    }),
+    }, { validateResult: false }),
   ]);
 
   const { epsSurprisePercent, revenueSurprisePercent } = extractEarningsSurprises(quoteSummary, targetBounds.end);

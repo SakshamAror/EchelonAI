@@ -49,6 +49,8 @@ function validateTavilyFormat(key: string): { valid: boolean; error?: string } {
 const yahooScriptPath = path.resolve(__dirname, "./scripts/fetch-yfinance-metrics.mjs");
 const yahooResolveScriptPath = path.resolve(__dirname, "./scripts/resolve-yahoo-ticker.mjs");
 const yahooSearchScriptPath = path.resolve(__dirname, "./scripts/search-yahoo-equities.mjs");
+const yahooQuoteScriptPath = path.resolve(__dirname, "./scripts/fetch-yahoo-quote.mjs");
+const yahooHistoryScriptPath = path.resolve(__dirname, "./scripts/fetch-yahoo-history.mjs");
 const agentDataScriptPath = path.resolve(__dirname, "./scripts/fetch-agent-data.py");
 const peerDataScriptPath  = path.resolve(__dirname, "./scripts/fetch-peer-data.py");
 const defaultAgentPythonPath = path.resolve(__dirname, "./.venv/bin/python");
@@ -557,6 +559,140 @@ function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
           res.end(stdout);
         } catch (err) {
           const detail = err instanceof Error ? err.message : "Failed to search equities";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/yahoo-quote")) return next();
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        const url = new URL(req.url, "http://localhost");
+        const tickers = (url.searchParams.get("tickers") ?? "").trim();
+        if (!tickers) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Missing query param: tickers" }));
+          return;
+        }
+
+        try {
+          const { stdout } = await execFileAsync(
+            process.execPath,
+            [yahooQuoteScriptPath, "--tickers", tickers],
+            { cwd: __dirname, maxBuffer: 2 * 1024 * 1024 }
+          );
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(stdout);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Failed to fetch quotes";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
+      // ── Alpaca proxy: pull account + fills + cash activities ─────────
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/alpaca/sync")) return next();
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        const keyId = req.headers["x-alpaca-key-id"];
+        const secret = req.headers["x-alpaca-secret"];
+        const paper = req.headers["x-alpaca-paper"] !== "0";
+        if (!keyId || !secret) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Missing Alpaca credentials" }));
+          return;
+        }
+
+        const base = paper ? "https://paper-api.alpaca.markets" : "https://api.alpaca.markets";
+        const h = { "APCA-API-KEY-ID": String(keyId), "APCA-API-SECRET-KEY": String(secret) };
+
+        async function fetchAll(type: string): Promise<unknown[]> {
+          let out: unknown[] = [];
+          let token: string | null = null;
+          for (let i = 0; i < 25; i++) {
+            const u = new URL(`${base}/v2/account/activities/${type}`);
+            u.searchParams.set("page_size", "100");
+            if (token) u.searchParams.set("page_token", token);
+            const r = await fetch(u, { headers: h });
+            if (!r.ok) break;
+            const arr = await r.json();
+            if (!Array.isArray(arr) || arr.length === 0) break;
+            out = out.concat(arr);
+            if (arr.length < 100) break;
+            token = (arr[arr.length - 1] as { id?: string })?.id ?? null;
+            if (!token) break;
+          }
+          return out;
+        }
+
+        try {
+          const acctRes = await fetch(`${base}/v2/account`, { headers: h });
+          if (!acctRes.ok) {
+            res.statusCode = acctRes.status === 401 || acctRes.status === 403 ? 401 : 502;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ detail: `Alpaca auth/account error (${acctRes.status}). Check keys + paper/live.` }));
+            return;
+          }
+          const account = await acctRes.json();
+          const [fills, csd, csw] = await Promise.all([fetchAll("FILL"), fetchAll("CSD"), fetchAll("CSW")]);
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ account, fills, csd, csw }));
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Alpaca sync failed";
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail }));
+        }
+      });
+
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/yahoo-history")) return next();
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Method not allowed" }));
+          return;
+        }
+
+        const url = new URL(req.url, "http://localhost");
+        const ticker = (url.searchParams.get("ticker") ?? "").trim();
+        const range = (url.searchParams.get("range") ?? "6mo").trim();
+        if (!ticker) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ detail: "Missing query param: ticker" }));
+          return;
+        }
+
+        try {
+          const { stdout } = await execFileAsync(
+            process.execPath,
+            [yahooHistoryScriptPath, "--ticker", ticker, "--range", range],
+            { cwd: __dirname, maxBuffer: 8 * 1024 * 1024 }
+          );
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(stdout);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "Failed to fetch history";
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ detail }));

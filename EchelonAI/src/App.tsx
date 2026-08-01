@@ -8,6 +8,7 @@ import AgentProgress from "@/components/AgentProgress";
 import ResultsPanel from "@/components/ResultsPanel";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import SettingsOverlay, { hasStoredKeys, syncKeysToServer } from "@/components/SettingsOverlay";
+import PortfolioPage from "@/components/PortfolioPage";
 import type { AnalysisRequest, AnalysisResult, AgentStep } from "@/types";
 import { getAnyStockResultWithLiveMetrics } from "@/api/demo";
 
@@ -53,6 +54,12 @@ export default function App() {
   const [settingsOpen,  setSettingsOpen]  = useState(false);
   const [keysReady,     setKeysReady]     = useState(() => hasStoredKeys());
   const [lightMode,     setLightMode]     = useState(() => localStorage.getItem("echelon_theme") === "light");
+  const [activePage,    setActivePage]    = useState<"analyze" | "portfolio">(
+    () => (localStorage.getItem("echelon_page") === "portfolio" ? "portfolio" : "analyze")
+  );
+
+  // Persist active tab so reload lands on the same page
+  useEffect(() => { localStorage.setItem("echelon_page", activePage); }, [activePage]);
 
   // On mount: sync any stored keys to the Vite dev server's .env
   useEffect(() => { syncKeysToServer(); }, []);
@@ -234,6 +241,42 @@ export default function App() {
         </div>
       </nav>
 
+      {/* ── Page tabs ───────────────────────────────────────────── */}
+      <div style={{
+        display: "flex", gap: 0, justifyContent: "center",
+        borderBottom: "1px solid var(--border)",
+        background: lightMode ? "rgba(238,235,211,0.97)" : "rgba(10,10,10,0.97)",
+        backdropFilter: "blur(10px)",
+        position: "sticky", top: 65, zIndex: 99,
+        padding: "0 40px",
+      }}>
+        {(["analyze", "portfolio"] as const).map(page => (
+          <button
+            key={page}
+            onClick={() => setActivePage(page)}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              padding: "12px 20px",
+              fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase",
+              color: activePage === page ? "var(--accent)" : "var(--text-dim)",
+              borderBottom: activePage === page ? "2px solid var(--accent)" : "2px solid transparent",
+              transition: "color 0.15s",
+              marginBottom: -1,
+            }}
+            onMouseEnter={e => { if (activePage !== page) e.currentTarget.style.color = "var(--text-muted)"; }}
+            onMouseLeave={e => { if (activePage !== page) e.currentTarget.style.color = "var(--text-dim)"; }}
+          >
+            {page}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Portfolio page ──────────────────────────────────────── */}
+      {activePage === "portfolio" && <PortfolioPage />}
+
+      {/* ── Analyze page ────────────────────────────────────────── */}
+      {activePage === "analyze" && <>
+
       {/* ── Hero + Form ─────────────────────────────────────────── */}
       <section style={{ padding: "60px 40px 40px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
         <p style={{ fontSize: 10, letterSpacing: "0.3em", color: "var(--text-muted)",
@@ -297,6 +340,8 @@ export default function App() {
           </ErrorBoundary>
         )}
       </section>
+
+      </>}
 
       {/* ── Settings overlay ────────────────────────────────────── */}
       <SettingsOverlay

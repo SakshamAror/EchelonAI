@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from "lucide-react";
+import { useAuth, signOut } from "@/lib/useAuth";
 
 interface Props {
   open: boolean;
@@ -43,6 +44,7 @@ export async function syncKeysToServer(): Promise<void> {
 type Status = "idle" | "saving" | "done";
 
 export default function SettingsOverlay({ open, onClose, onSaved }: Props) {
+  const { session } = useAuth();
   const [groqKey, setGroqKey]       = useState("");
   const [tavilyKey, setTavilyKey]   = useState("");
   const [showGroq, setShowGroq]     = useState(false);
@@ -251,6 +253,31 @@ export default function SettingsOverlay({ open, onClose, onSaved }: Props) {
             Keys are saved to your local <code style={{ color: "var(--text-muted)" }}>.env</code> file and persisted in browser storage. Never shared externally.
           </p>
         </div>
+
+        {/* Account — sign in state + sign out */}
+        {session && (
+          <div style={{
+            padding: "14px 20px", borderTop: "1px solid var(--border)",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ fontSize: 9, letterSpacing: "0.16em", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                Account
+              </span>
+              <span style={{ fontSize: 12, color: "var(--text)" }}>{session.user.email}</span>
+            </div>
+            <button
+              onClick={() => signOut()}
+              style={{
+                background: "none", border: "1px solid var(--border)", cursor: "pointer",
+                color: "var(--text-muted)", fontFamily: "'DM Mono', monospace",
+                fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 14px",
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{
