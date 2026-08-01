@@ -1,3 +1,7 @@
+# macOS system files
+.DS_Store
+**/.DS_Store
+
 # Local environment files (secrets)
 .env
 .env.*
