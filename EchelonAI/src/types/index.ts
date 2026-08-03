@@ -35,6 +35,7 @@ export interface FinancialMetrics {
   enterpriseToEbitda?: number | null;
   returnOnEquity?: number | null;
   debtToEquity?: number | null;
+  interestCoverageRatio?: number | null;
   priceToBook?: number | null;
   currentRatio?: number | null;
   quickRatio?: number | null;

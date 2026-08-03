@@ -108,7 +108,8 @@ const METRIC_DEFINITIONS: MetricDefinition[] = [
   },
   {
     key: "interestCoverageRatio", label: "Interest Coverage Ratio", category: "balance",
-    definition: "Operating income divided by interest expense. Measures how comfortably a company can pay interest on its debt from operating profit. Below 1.5 is often considered a warning sign."
+    definition: "Operating income divided by interest expense. Measures how comfortably a company can pay interest on its debt from operating profit. Below 1.5 is often considered a warning sign.",
+    format: "number"
   },
   {
     key: "currentRatio", label: "Current Ratio", category: "balance", format: "ratio",
