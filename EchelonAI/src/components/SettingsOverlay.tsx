@@ -87,14 +87,20 @@ export default function SettingsOverlay({ open, onClose, onSaved }: Props) {
 
       setResult(data);
       setStatus("done");
-      if (data.groq.valid && data.tavily.valid) onSaved();
+      // Unlock Analyze once keys are entered + saved, even if validation failed —
+      // a bad key shouldn't block the user from trying; the request itself will
+      // surface the real error if the key doesn't work.
+      if (groqKey.trim() && tavilyKey.trim()) onSaved();
     } catch (err) {
+      if (groqKey.trim()) localStorage.setItem(LS_GROQ, groqKey.trim());
+      if (tavilyKey.trim()) localStorage.setItem(LS_TAVILY, tavilyKey.trim());
       setResult({
         saved: false,
         groq: { valid: false, error: err instanceof Error ? err.message : "Network error" },
         tavily: { valid: false, error: "Could not reach server" },
       });
       setStatus("done");
+      if (groqKey.trim() && tavilyKey.trim()) onSaved();
     }
   }, [groqKey, tavilyKey, status, onSaved]);
 

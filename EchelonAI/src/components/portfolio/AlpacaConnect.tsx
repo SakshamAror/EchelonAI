@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Settings } from "lucide-react";
 import { createProfile } from "@/lib/portfolioApi";
 import { saveAlpacaCreds, loadAlpacaCreds, syncAlpacaToProfile, type AlpacaCreds } from "@/lib/alpacaApi";
 
@@ -84,6 +85,7 @@ export function AlpacaSyncPanel({ profileId, onSynced }: { profileId: string; on
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   async function sync() {
     setErr(null); setMsg(null);
@@ -94,6 +96,7 @@ export function AlpacaSyncPanel({ profileId, onSynced }: { profileId: string; on
       saveAlpacaCreds(profileId, creds);
       const r = await syncAlpacaToProfile(profileId, creds);
       setMsg(`Synced ${r.trades} trades, ${r.flows} cash flows.`);
+      setEditing(false);
       onSynced();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Sync failed");
@@ -102,12 +105,14 @@ export function AlpacaSyncPanel({ profileId, onSynced }: { profileId: string; on
     }
   }
 
+  const showInputs = !existing || editing;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <p style={{ fontSize: 11, color: "var(--text-muted)" }}>
         Pull the latest fills + deposits/withdrawals from Alpaca. Re-syncing replaces stored data.
       </p>
-      {!existing && (
+      {showInputs && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} placeholder="Key ID" value={keyId} onChange={e => setKeyId(e.target.value)} autoComplete="off" />
           <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} placeholder="Secret" type="password" value={secret} onChange={e => setSecret(e.target.value)} autoComplete="off" />
@@ -120,7 +125,31 @@ export function AlpacaSyncPanel({ profileId, onSynced }: { profileId: string; on
         <button style={{ ...btnStyle, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={sync}>
           {busy ? "Syncing…" : "Sync from Alpaca"}
         </button>
-        {existing && <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{existing.paper ? "Paper" : "Live"} · key ••••{existing.keyId.slice(-4)}</span>}
+        {existing && !editing && (
+          <>
+            <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{existing.paper ? "Paper" : "Live"} · key ••••{existing.keyId.slice(-4)}</span>
+            <button
+              onClick={() => setEditing(true)}
+              title="Change keys"
+              style={{
+                background: "none", border: "1px solid var(--border)", cursor: "pointer",
+                color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center",
+                width: 26, height: 26, flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent-dim)"; e.currentTarget.style.color = "var(--accent)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+            >
+              <Settings size={12} />
+            </button>
+          </>
+        )}
+        {existing && editing && (
+          <button
+            onClick={() => { setEditing(false); setKeyId(existing.keyId); setSecret(existing.secret); setPaper(existing.paper); setErr(null); }}
+            style={{ background: "none", border: "1px solid var(--border)", color: "var(--text-dim)", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", padding: "6px 10px", cursor: "pointer" }}>
+            Cancel
+          </button>
+        )}
       </div>
       {msg && <div style={{ fontSize: 11, color: "var(--green)" }}>{msg}</div>}
       {err && <div style={{ fontSize: 11, color: "var(--red)" }}>{err}</div>}

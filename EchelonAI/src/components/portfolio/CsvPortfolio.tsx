@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
-import EquityCurve, { type EquityPoint } from "@/components/portfolio/EquityCurve";
+import EquityCurve, { type EquityPoint, type SeriesLine } from "@/components/portfolio/EquityCurve";
 import CsvImport from "@/components/portfolio/CsvImport";
 import { AlpacaConnectForm, AlpacaSyncPanel } from "@/components/portfolio/AlpacaConnect";
 import StatsBar from "@/components/portfolio/StatsBar";
@@ -8,6 +8,7 @@ import ReturnBySymbol, { type SymbolReturn } from "@/components/portfolio/Return
 import { getQuotes, getQuote, getHistory, type Quote, type HistoryRange } from "@/lib/priceApi";
 import { replayPositions, buildCsvCurves, type ReplayTrade, type DerivedPosition, type RealizedEvent } from "@/lib/tradeReplay";
 import { computeStats, periodsPerYear, isShortWindow } from "@/lib/portfolioStats";
+import { useStatsTier } from "@/lib/useStatsTier";
 import {
   listProfiles, createProfile, deleteProfile, listTrades, listCashFlows,
   addCashFlow, deleteCashFlow, toFlowEvents, type Profile, type CashFlow,
@@ -60,8 +61,8 @@ function EmptyState({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-const RANGES: HistoryRange[] = ["1d", "5d", "1mo", "6mo", "1y", "5y", "max"];
-const RANGE_LABEL: Record<HistoryRange, string> = { "1d": "1D", "5d": "5D", "1mo": "1M", "6mo": "6M", "1y": "1Y", "5y": "5Y", "max": "ALL" };
+export const RANGES: HistoryRange[] = ["1d", "5d", "1mo", "6mo", "1y", "5y", "max"];
+export const RANGE_LABEL: Record<HistoryRange, string> = { "1d": "1D", "5d": "5D", "1mo": "1M", "6mo": "6M", "1y": "1Y", "5y": "5Y", "max": "ALL" };
 
 const dayMsOf = (iso: string) => new Date(iso + "T00:00:00Z").getTime();
 
@@ -262,7 +263,8 @@ export default function CsvPortfolio() {
   const [err, setErr] = useState<string | null>(null);
 
   const [range, setRange] = useState<HistoryRange>("6mo");
-  const [view, setView] = useState<"value" | "performance">("value");
+  const [view, setView] = useState<"value" | "log" | "performance">("value");
+  const tier = useStatsTier();
   const [nlvCurve, setNlvCurve] = useState<EquityPoint[]>([]);
   const [perfCurve, setPerfCurve] = useState<EquityPoint[]>([]);
   const [benchmark, setBenchmark] = useState<EquityPoint[]>([]);
@@ -272,6 +274,9 @@ export default function CsvPortfolio() {
   const [adding, setAdding] = useState(false);
 
   const active = profiles.find(p => p.id === activeId) ?? null;
+
+  // Log view is advanced-only — drop back to Equity $ if advanced mode gets turned off
+  useEffect(() => { if (view === "log" && tier !== "advanced") setView("value"); }, [tier, view]);
 
   // 3-month T-bill yield (^IRX) → annual risk-free rate for Sharpe/Sortino/Alpha
   useEffect(() => {
@@ -349,6 +354,28 @@ export default function CsvPortfolio() {
   const holdingRows = replay ? buildHoldingRows(replay.positions, quotes, nlv) : [];
 
   const portfolioSeries = view === "performance" ? perfCurve : nlvCurve;
+  const logScale = view === "log" && tier === "advanced";
+
+  // Perf % is an unlevered return index that starts at 0% — the legacy single-line EquityCurve
+  // mode rebases SPY by multiplying against portfolio[0].value, which breaks at a zero anchor.
+  // Multi-series mode sidesteps that (each series is pre-computed in its own display units).
+  const perfSeries: SeriesLine[] | undefined = view === "performance" && perfCurve.length >= 2
+    ? (() => {
+        const ref = perfCurve[0].value || 1;
+        const s: SeriesLine[] = [{
+          id: "portfolio", label: active?.account_name ?? "Portfolio", color: "var(--accent)",
+          points: perfCurve.map(p => ({ t: p.t, value: (p.value / ref - 1) * 100 })),
+        }];
+        if (benchmark.length >= 2) {
+          const bRef = benchmark[0].value || 1;
+          s.push({
+            id: "spy", label: "SPY", color: "var(--text-dim)", dashed: true,
+            points: benchmark.map(b => ({ t: b.t, value: (b.value / bRef - 1) * 100 })),
+          });
+        }
+        return s;
+      })()
+    : undefined;
 
   // Click a symbol → confirm → open the Analyze tab prefilled with that ticker
   function analyzeTicker(ticker: string) {
@@ -373,7 +400,7 @@ export default function CsvPortfolio() {
         return computeStats({
           nlv: nlvCurve, perf: perfCurve, benchmark,
           netFlowInWindow, realizedInWindow,
-          periodsPerYear: periodsPerYear(range), annualRiskFree, shortWindow: isShortWindow(range),
+          periodsPerYear: periodsPerYear(perfCurve), annualRiskFree, shortWindow: isShortWindow(range),
         });
       })()
     : null;
@@ -418,10 +445,14 @@ export default function CsvPortfolio() {
           <div className="panel-label" style={{ marginBottom: 0 }}>Portfolio vs SPY</div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div style={{ display: "flex", gap: 2 }}>
-              {(["value", "performance"] as const).map(v => (
-                <button key={v} onClick={() => setView(v)} title={v === "performance" ? "Time-weighted return, flow-neutral (fair vs SPY)" : "Equity = cash + market value (cash negative on leverage)"}
+              {(tier === "advanced"
+                ? (["value", "log", "performance"] as const)
+                : (["value", "performance"] as const)
+              ).map(v => (
+                <button key={v} onClick={() => setView(v)}
+                  title={v === "performance" ? "Unlevered return on positions — flow- and leverage-neutral (fair vs SPY)" : v === "log" ? "Equity $ on a logarithmic y-axis" : "Equity = cash + market value (cash negative on leverage)"}
                   style={{ background: v === view ? "var(--surface-2)" : "transparent", color: v === view ? "var(--accent)" : "var(--text-dim)", border: "1px solid var(--border)", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", padding: "4px 8px", cursor: "pointer" }}>
-                  {v === "performance" ? "Perf %" : "Equity $"}
+                  {v === "performance" ? "Perf %" : v === "log" ? "Log" : "Equity $"}
                 </button>
               ))}
             </div>
@@ -435,7 +466,12 @@ export default function CsvPortfolio() {
             </div>
           </div>
         </div>
-        <EquityCurve portfolio={portfolioSeries} benchmark={benchmark} loading={curveLoading}
+        <EquityCurve
+          portfolio={perfSeries ? undefined : portfolioSeries}
+          benchmark={perfSeries ? undefined : benchmark}
+          series={perfSeries}
+          valueFormat={view === "performance" ? "percent" : "money"}
+          loading={curveLoading} logScale={logScale}
           emptyMessage="Import trades to see your equity curve." />
       </div>
 

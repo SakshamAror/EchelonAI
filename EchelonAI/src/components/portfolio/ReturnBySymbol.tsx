@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 
 export interface SymbolReturn {
@@ -56,6 +57,18 @@ export default function ReturnBySymbol({ data, onPick }: { data: SymbolReturn[];
   const sorted = [...data].sort((a, b) => Math.abs(b.returnPct) - Math.abs(a.returnPct));
   const top = sorted.slice(0, 10).sort((a, b) => b.returnPct - a.returnPct);
 
+  useEffect(() => {
+    if (!expanded) return;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, [expanded]);
+
   if (data.length === 0) {
     return <div style={{ fontSize: 11, color: "var(--text-dim)", padding: "12px 0" }}>No open positions.</div>;
   }
@@ -77,8 +90,8 @@ export default function ReturnBySymbol({ data, onPick }: { data: SymbolReturn[];
         )}
       </div>
 
-      {expanded && (
-        <div onClick={() => setExpanded(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
+      {expanded && createPortal(
+        <div onClick={() => setExpanded(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
           <div onClick={e => e.stopPropagation()} className="panel-box" style={{ width: "100%", maxWidth: 720, maxHeight: "85vh", overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div className="panel-label" style={{ marginBottom: 0 }}>Return by Symbol — All</div>
@@ -88,7 +101,8 @@ export default function ReturnBySymbol({ data, onPick }: { data: SymbolReturn[];
             </div>
             <Bars rows={sorted} onPick={onPick} />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

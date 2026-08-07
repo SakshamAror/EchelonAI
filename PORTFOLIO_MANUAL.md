@@ -12,6 +12,13 @@ Updated as features are added. All formulas use daily returns unless noted.
 - **Alpaca (direct)** — user's own **read-only** key/secret (paper/live). Proxied server-side via
   the Vite dev endpoint `/alpaca/sync`; pulls FILL + CSD/CSW; reconciles `starting_cash` so replayed
   cash matches Alpaca exactly. Keys in browser localStorage (dev). SnapTrade deferred (other brokers).
+  A gear icon on the sync panel (`AlpacaConnect.tsx`) lets the user re-enter key/secret if the
+  originals were wrong, without deleting and recreating the profile.
+
+**Portfolio-page sub-tabs (`PortfolioPage.tsx`):** **Portfolio** (single-profile dashboard, below) and
+**Comparison** (multi-profile overlay, see its own section below). Full-bleed sticky bar (`.subtab-bar`
+in `index.css`) mirroring the main Analyze/Portfolio nav, with a subtle diagonal orange sheen; selected
+sub-tab persisted in `localStorage`.
 
 **Auth + storage:** Supabase (Google OAuth), RLS on every table. Migrations `0001`–`0006`.
 - `0001` core tables · `0002` (manual, later removed) · `0003` opened_at · `0004` grants
@@ -22,28 +29,48 @@ Updated as features are added. All formulas use daily returns unless noted.
 `/alpaca/sync`. All yahoo-finance2 calls use `validateResult:false`.
 
 **Engine (`lib/tradeReplay.ts`):** `replayPositions` (avg-cost positions, realized P&L, signed qty
-for long/short, negative cash for margin) + `buildCsvCurves` (NLV curve + TWR performance curve).
+for long/short, negative cash for margin) + `buildCsvCurves` (NLV curve + unlevered return curve).
 
-**Equity curve:** clipped to the first trade date; **Value $ / Perf %** toggle; ranges below.
-Chart component `EquityCurve.tsx` rebases SPY to the portfolio start.
+**Equity curve:** clipped to the first trade date; **Value $ / Log / Perf %** toggle (Log is
+advanced-mode only — same $ series as Value, rendered on a log y-axis with 1/2/5×10ⁿ gridlines,
+via `EquityCurve`'s `logScale` prop); ranges below. Chart component `EquityCurve.tsx` rebases SPY
+to the portfolio start. `EquityCurve` also supports a **multi-series overlay mode** (`series` prop,
+percent-based `valueFormat`) used by the Comparison tab — the single-profile path above is untouched.
 
 **Chart ranges (live yahoo fetch, `/yahoo-history`):**
 | Button | Lookback | Interval |
 |---|---|---|
 | 1D | latest session | 5m |
 | 5D | 5 days | 15m |
-| 1M / 6M / 1Y | 1–12 mo | 1d |
+| 1M | 1 mo | 5m |
+| 6M | 6 mo | 60m |
+| 1Y | 12 mo | 60m |
 | 5Y | 5 yr | 1wk |
 | ALL | full | 1mo |
 
+Interval config lives in `scripts/fetch-yahoo-history.mjs`'s `RANGE_CONFIG` (single source of truth,
+no duplication in the Vite proxy). 1M was bumped from daily to 5-minute bars, and 6M/1Y from daily
+to hourly (60m), for higher-resolution charts — Yahoo serves 5m data for ~60 trailing days and 60m
+data for ~730 trailing days, so both 1M (30 days) and 6M/1Y (180–365 days) sit comfortably inside
+their respective windows (confirmed live: ~4,000 points/ticker for both 1M and 1Y, including
+extended-hours prints — Yahoo's intraday bars aren't limited to the 9:30–16:00 ET session).
+
+No new request-rate risk from this: the client already caches each `ticker:range` history fetch for
+5 minutes (`lib/priceApi.ts`, `historyCache`), so switching ranges/views doesn't refetch — this
+change only makes each *existing* request's response bigger, not more frequent.
+
 **Stats bar (built).** Full-width, two tiers via a gear toggle (persisted in localStorage):
 - **Core (7):** PnL, Total Return, CAGR, vs SPY, Max Drawdown, Sharpe, Win Rate
-- **Advanced (+6):** Sortino, Calmar, Volatility, Beta, Alpha, P/L Ratio
+- **Advanced (+7):** Sortino, Calmar, Volatility, Beta, Alpha, P/L Ratio, Volatility Drag
 
 Implementation specifics (`lib/portfolioStats.ts`):
-- All return/risk metrics computed on the **TWR performance series** (flow-neutral).
-- **Annualization by data frequency** (periods/year): 252 daily (1M/6M/1Y), 52 weekly (5Y), 12 monthly (ALL).
-  1D/5D and windows < 25 days → annualized metrics show "—".
+- All return/risk metrics computed on the **unlevered return series** (flow- and leverage-neutral).
+- **Annualization (`periodsPerYear()`) is derived from the actual sampled series** — point count over
+  its real time span — rather than a static per-range table. This replaced an earlier hardcoded guess
+  (e.g. "1M ≈ 78 bars/day, regular session only") that undercounted real bar density once Yahoo's
+  extended-hours prints were accounted for; deriving it from the live data is correct for any range
+  or interval without needing to track Yahoo's actual session behavior by hand.
+  1D/5D and windows < 25 days → annualized metrics show "—" regardless (`isShortWindow()`).
 - Risk-free rate = live **^IRX** (3-mo T-bill) yield ÷ 100; fallback 4.5%.
 - **Win Rate / P/L Ratio** from *closed* (position-reducing) trades within the window — the replay
   engine emits a `realizedEvents` list; each round-trip's realized P&L (net of that trade's fees)
@@ -51,9 +78,10 @@ Implementation specifics (`lib/portfolioStats.ts`):
 - **Max DD** on the flow-neutral curve; **Beta/Alpha** regress portfolio vs SPY daily returns.
 - All scoped to the selected range's window.
 
-**Not yet built (planned):** allocation pie, return-by-symbol, rolling Sharpe, drawdown chart,
-sub-tabs, SnapTrade, per-day snapshot caching in Supabase (`equity_snapshots`/`price_cache` exist in
-schema but v1 fetches prices live rather than caching them).
+**Not yet built (planned):** allocation pie, rolling Sharpe, drawdown chart, Comparison tab's
+per-symbol overlap/diff, SnapTrade, per-day snapshot caching in Supabase (`equity_snapshots`/
+`price_cache` exist in schema but v1 fetches prices live rather than caching them),
+**Monte Carlo return-path reshuffling** (see its own section below).
 
 ---
 
@@ -206,20 +234,27 @@ the trade-replay engine (`lib/tradeReplay.ts`):
   Idle cash sits in the cash term (dilutes return correctly); margin = negative cash; shorts add
   cash + a negative holding.
 
-### Cash flows + Time-Weighted Return (TWR)
-Deposits/withdrawals are external cash movements, NOT performance. Counting them as gains would
-distort every stat. So:
-- They're stored as signed events and included in `cash(t)` (→ correct NLV).
-- **Performance** uses TWR: chain per-interval returns with flows removed, so funding the account
-  has zero effect on the % return. This is the fair vs-SPY comparison.
+### Cash flows + unlevered return (Perf %)
+Deposits/withdrawals are external cash movements, NOT performance, and leverage/margin sizing is a
+financing choice, not position performance. Counting either as gains/losses would distort every
+stat. So `performance` (`buildCsvCurves` in `lib/tradeReplay.ts`) is computed as return on **gross
+exposure**, not return on equity:
 ```
-r_i   = (NLV_i − external_flow_i) / NLV_{i-1} − 1     (flow_i = net deposit/withdrawal in interval i)
-TWR   = Π(1 + r_i) − 1
+r(t) = Σ[qty_i(t-1) × (price_i(t) - price_i(t-1))] / Σ|qty_i(t-1) × price_i(t-1)|
+index(t) = index(t-1) × (1 + r(t))          (index starts at 100)
 ```
-Two curve views: **Value $** (NLV, real dollars incl. deposits) and **Perf %** (TWR index, flow-neutral).
-Sharpe/vol/drawdown derive from the TWR return series. Dividends/interest are skipped in v1
-(slightly understates return; never inflates). External deposits not present in the CSV are added
-via the manual deposits/withdrawals editor.
+Cash never appears in this formula, so it's automatically both:
+- **Flow-neutral** — deposits/withdrawals only affect `cash(t)`, which isn't part of the calc.
+- **Leverage-neutral** — a levered and unlevered account holding identical positions produce the
+  exact same curve, since leverage scales numerator and denominator equally and cancels out.
+
+Two curve views: **Value $** (NLV, real dollars incl. deposits, cash-inclusive) and **Perf %**
+(unlevered return index — rendered via `EquityCurve`'s multi-series mode so it can be shown as a
+true percentage rather than an arbitrary-base dollar figure). Sharpe/Vol/Beta/Alpha/Sortino/Calmar/
+Volatility Drag all derive from this same return series — all are ratio-based, so they're unaffected
+by the index's arbitrary starting value (100). Dividends/interest are skipped in v1 (slightly
+understates return; never inflates). External deposits not present in the CSV are added via the
+manual deposits/withdrawals editor (they still affect NLV/Value $, just not Perf %).
 
 ---
 
@@ -265,11 +300,10 @@ sharpe = (mean(r) - r_f/252) / std_dev(r) × √252
 - Shown as "—" for timeframes < 30 days
 
 ### Sortino Ratio
-Like Sharpe but only penalizes downside volatility:
+Like Sharpe but only penalizes downside volatility (shortfalls below the per-period risk-free rate, MAR = r_f):
 ```
-downside_returns = r[r < 0]
-downside_std = std_dev(downside_returns) × √252
-sortino = (mean(r) × 252 - r_f) / downside_std
+downside_dev = sqrt( Σ min(r_t - r_f/252, 0)^2 / N ) × √252     (N = total periods, not just losing ones)
+sortino = (mean(r) - r_f/252) / downside_dev × √252
 ```
 
 ### Max Drawdown
@@ -391,6 +425,132 @@ Plotted as a line chart over the selected timeframe.
 drawdown(t) = (portfolio_value(t) - running_peak(t)) / running_peak(t)
 ```
 Plotted as area fill below 0 (red). Annotated with max drawdown value and recovery date.
+
+### Volatility Drag
+Gap between arithmetic and geometric mean return caused by compounding variance — the
+higher the volatility, the more the geometric return lags the simple average return.
+```
+arithmetic_mean = mean(r)
+geometric_mean  = exp(mean(ln(1 + r))) - 1
+volatility_drag = [(1 + arithmetic_mean)^ppy - 1] - [(1 + geometric_mean)^ppy - 1]
+```
+Computed exactly from the period-return series (not the `σ²/2` small-returns approximation).
+
+---
+
+## Comparison Tab
+
+Cross-profile overlay (`ComparisonTab.tsx`), a Portfolio-page sub-tab alongside the single-profile
+dashboard. Lets a user pick any subset of their own profiles and compare performance on a common,
+flow- **and leverage-neutral** % basis — no per-symbol overlap/diff yet (deferred).
+
+**Leverage-neutral by construction.** `buildCsvCurves` in `tradeReplay.ts` computes `performance` as
+return on **gross exposure**, not return on equity:
+```
+r(t) = Σ[qty_i(t-1) × (price_i(t) - price_i(t-1))] / Σ|qty_i(t-1) × price_i(t-1)|
+```
+Cash and margin never enter this formula, so leverage cancels out of both numerator and denominator
+— a 3x-margined and unlevered profile holding the identical position produce the **exact same**
+curve (verified: simulating 10 unlevered vs. 20 2x-levered shares of the same price path produces
+NLV curves that diverge sharply, e.g. $1000→$1200→$900→$1400 vs. $1000→$1100→$950→$1200, while the
+`performance` index is byte-identical for both, exactly tracking the underlying price path). This is
+also inherently flow-neutral — deposits/withdrawals affect cash, which isn't part of the formula at
+all, so no separate flow-removal step is needed the way the old NLV-ratio TWR needed one.
+
+**Profile selection:** multi-select checklist, persisted to `localStorage`
+(`echelon_compare_profiles`). Each profile gets a **stable color** derived from a hash of its id
+(`hashColor()`), so a profile's color never shifts based on selection order or what else is picked.
+
+**Timeframe:** independent range selector (own `1D…ALL` bar, separate state from the Portfolio tab).
+
+**Data pipeline:** for the selected profiles, fetches trades/cash-flows per profile, then one shared
+price history per ticker (union across all selected profiles) **on a single shared time axis**
+(`getHistory("SPY", range)`'s timestamps). Running `buildCsvCurves` with that same axis for every
+profile keeps all curves point-aligned for free — no separate interpolation step.
+
+**Common-window clipping + rebasing** (the leverage- and flow-neutral % comparison):
+```
+commonStart = max(firstTradeDate_i)  for every selected profile i
+window      = [commonStart, latest axis point]
+```
+Only the range where **every** selected profile has live data is shown — a profile connected
+recently shortens the visible window for everyone rather than showing a misleading flat/zero
+segment for the others. Each profile's unlevered return index is then rebased to the window start:
+```
+pct_i(t) = perf_i(t) / perf_i(window_start) - 1     (× 100 for display)
+```
+SPY gets the same treatment and is always included as a dashed reference line. Rebasing by a later
+reference point is just a chain-rule shift of the same index — ratios are invariant to it, so this
+works regardless of what `performance`'s starting value happens to be (it starts at a flat 100 from
+`buildCsvCurves`, not tied to the profile's actual NLV).
+
+**Chart:** `EquityCurve`'s multi-series mode (`series` prop, `valueFormat="percent"`) — one path per
+profile plus SPY, shared x/y scale, per-series hover tooltip, auto-generated legend with each
+series' total return over the window.
+
+**Stats table:** profiles as rows, metrics as columns, reusing `computeStats()` per profile scoped
+to the common window (same `netFlowInWindow` / `realizedInWindow` / `periodsPerYear` /
+`shortWindow` construction as the single-profile Stats Bar). Column set (core 7 or core+advanced 14)
+matches the same tier toggle as `StatsBar`, synced live via `useStatsTier()`
+(`src/lib/useStatsTier.ts` — a small pub-sub over `localStorage` so both components stay in sync
+without a page reload). Metric labels/formatters shared with `StatsBar` via `src/lib/statDefs.ts`.
+
+---
+
+## Monte Carlo Reshuffling (planned, not yet built)
+
+"What if the same market moves had happened in a different order?" — a path-dependency /
+sequence-of-returns visualization. Not yet built; documenting the intended design so it's ready
+to implement.
+
+**Core idea — stationary bootstrap** (Politis & Romano), not plain permutation. Plain permutation
+(shuffle each return exactly once) destroys volatility clustering — it can place a crash-era day
+right next to a calm bull-market day, understating how real drawdowns actually cluster together.
+Stationary bootstrap instead resamples **contiguous blocks** of the actual return series, with
+random block length, so short-run autocorrelation/clustering survives even though the overall
+order is randomized:
+```
+L        = mean block length (tunable, e.g. 20 periods)
+p        = 1 / L                     (probability of starting a fresh block each step)
+i_0      = random start index in [0, n)
+for k in 1..n:
+  r_shuffled(k) = r[i_k mod n]        // circular wrap — avoids edge bias (this is what
+                                       // makes it "stationary" rather than plain block bootstrap)
+  i_{k+1} = i_k + 1            with probability (1 - p)   // continue current block
+          = random index in [0, n)    with probability p  // jump to a new block
+
+value_sim(0) = 100
+value_sim(k) = value_sim(k-1) × (1 + r_shuffled(k))
+```
+Sampling is **with replacement** (some historical returns appear multiple times in a given
+simulation, others not at all) — unlike plain permutation, this means **ending value is no longer
+guaranteed identical across simulations**. That's an intentional tradeoff: the output becomes a
+genuine joint distribution of both path *and* outcome for the same historical window, not just a
+fixed-outcome path-risk view — while still respecting real volatility clustering far better than
+i.i.d. resampling of individual returns.
+- **Max drawdown distribution** — e.g. "your real max DD was −18%; 1,000 stationary-bootstrap
+  resamples of this same return history ranged from −9% to −31%."
+- **Ending value distribution** — now meaningfully varies too (unlike plain permutation), giving a
+  rough sense of how much of the realized total return depended on clustering/timing luck.
+- **Worst peak-to-trough duration distribution** — how long the deepest drawdown could have lasted.
+- A **fan chart**: N simulated paths (or percentile bands — 5th/25th/50th/75th/95th) overlaid with
+  the actual historical path highlighted, using `EquityCurve`'s existing multi-series mode.
+- **Mean block length `L` is a real design parameter**, not an implementation detail — too short
+  (e.g. L=1) degenerates to plain i.i.d. bootstrap and loses clustering; too long produces few
+  effective blocks and simulations that look nearly identical to the actual path. Start around
+  L≈15–20 periods for daily-ish data and tune from there.
+
+**Scope decision needed:** operate purely on the flow-neutral return series (ignore deposit/
+withdrawal timing entirely — cleanest, since remapping real calendar-dated flows onto a reordered
+sequence is ambiguous once the order changes) vs. the classic retirement-style simulation where
+withdrawals interact with return order (a withdrawal landing during a shuffled bad patch compounds
+worse than during a good patch) — the latter is more insightful but only applies to profiles with
+real cash flows, and requires deciding whether flows re-anchor to shuffled positions or stay fixed
+to original dates. Recommend starting with the pure-return-series version (simpler, always
+applicable) and revisiting cash-flow interaction as a fast-follow if there's demand for it.
+
+**Where it'd live:** likely an [ADVANCED] panel on the single-profile Portfolio tab (same section as
+Rolling Sharpe / Drawdown), scoped to the currently selected timeframe range.
 
 ---
 

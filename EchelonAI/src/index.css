@@ -5,9 +5,9 @@
 @layer base {
   :root {
     --bg:        #0a0a0a;
-    --surface:   #1a1d22;
-    --surface-2: #21252c;
-    --border:    #32363f;
+    --surface:   #0e0d08;
+    --surface-2: #15181a;
+    --border:    #131417;
     --border-2:  #42474f;
     --text:      #f2f3ef;
     --text-muted:#b0b2ad;
@@ -204,6 +204,30 @@
     flex: 1;
     height: 1px;
     background: var(--border);
+  }
+
+  /* Portfolio page sub-tab bar — full-bleed sticky, mirrors the main Analyze/Portfolio nav,
+     with a subtle diagonal orange sheen to distinguish it as a secondary-level nav. */
+  .subtab-bar {
+    display: flex;
+    gap: 0;
+    justify-content: center;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 121px;
+    z-index: 98;
+    padding: 0 40px;
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    backdrop-filter: blur(10px);
+    background:
+      linear-gradient(120deg, rgba(245,166,35,0.10) 0%, rgba(245,166,35,0) 35%, rgba(245,166,35,0) 65%, rgba(245,166,35,0.07) 100%),
+      rgba(10,10,10,0.97);
+  }
+  [data-theme="light"] .subtab-bar {
+    background:
+      linear-gradient(120deg, rgba(168,100,0,0.10) 0%, rgba(168,100,0,0) 35%, rgba(168,100,0,0) 65%, rgba(168,100,0,0.07) 100%),
+      rgba(238,235,211,0.97);
   }
 
   /* Shared panel box */

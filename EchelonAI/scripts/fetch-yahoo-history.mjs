@@ -11,9 +11,9 @@ const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 const RANGE_CONFIG = {
   "1d":  { days: 5,      interval: "5m", lastSessionOnly: true },
   "5d":  { days: 5,      interval: "15m" },
-  "1mo": { months: 1,    interval: "1d" },
-  "6mo": { months: 6,    interval: "1d" },
-  "1y":  { months: 12,   interval: "1d" },
+  "1mo": { months: 1,    interval: "5m" },
+  "6mo": { months: 6,    interval: "60m" },
+  "1y":  { months: 12,   interval: "60m" },
   "5y":  { months: 60,   interval: "1wk" },
   "max": { months: null, interval: "1mo" },
 };

@@ -55,6 +55,3 @@ export function streamAnalysis(
 
   return () => es.close();
 }
-
-// ─── Demo fixtures (used when backend is not running) ─────────────────────
-export { DEMO_RESULTS } from "./demo";

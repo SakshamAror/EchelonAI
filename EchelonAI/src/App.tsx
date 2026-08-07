@@ -10,12 +10,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import SettingsOverlay, { hasStoredKeys, syncKeysToServer } from "@/components/SettingsOverlay";
 import PortfolioPage from "@/components/PortfolioPage";
 import type { AnalysisRequest, AnalysisResult, AgentStep } from "@/types";
-import { getAnyStockResultWithLiveMetrics } from "@/api/demo";
-
-// Set VITE_USE_DEMO=false in .env to enable live analysis mode
-const USE_DEMO = import.meta.env.VITE_USE_DEMO !== "false";
-// Set VITE_BYPASS_DEMO_PROGRESS=true to skip agent animation and show results immediately
-const BYPASS_DEMO_AGENT_PROGRESS = import.meta.env.VITE_BYPASS_DEMO_PROGRESS === "true";
+import { getAnyStockResultWithLiveMetrics } from "@/api/analysis";
 
 const DEFAULT_STEPS: AgentStep[] = [
   { id: "ticker",     label: "Resolving equity and market data",             status: "pending" },
@@ -25,23 +20,6 @@ const DEFAULT_STEPS: AgentStep[] = [
   { id: "scores",     label: "Computing Echelon scores",                     status: "pending" },
   { id: "synthesize", label: "Synthesizing analysis via Groq LLM",          status: "pending" },
 ];
-
-function simulateSteps(
-  setSteps: React.Dispatch<React.SetStateAction<AgentStep[]>>,
-  onDone: () => void
-) {
-  let i = 0;
-  function advance() {
-    if (i >= DEFAULT_STEPS.length) { onDone(); return; }
-    setSteps(prev => prev.map((s, idx) => idx === i ? { ...s, status: "running" } : s));
-    setTimeout(() => {
-      setSteps(prev => prev.map((s, idx) => idx === i ? { ...s, status: "done" } : s));
-      i++;
-      setTimeout(advance, 120);
-    }, 700 + Math.random() * 400);
-  }
-  advance();
-}
 
 export default function App() {
   const runIdRef = useRef(0);
@@ -105,61 +83,8 @@ export default function App() {
     setLastReq(req);
     setStepsForRun(DEFAULT_STEPS.map(s => ({ ...s, status: "pending" })));
 
-    if (USE_DEMO) {
-      if (BYPASS_DEMO_AGENT_PROGRESS) {
-        const demo = await getAnyStockResultWithLiveMetrics(req);
-        if (runIdRef.current !== runId) return;
-        setResult(demo);
-        setOverlayOn(false);
-        setStepsForRun([]);
-        setLoading(false);
-        return;
-      }
-
-      // Run animation and data fetch concurrently.
-      // Loading screen shows immediately; result appears when BOTH are done.
-      let dataResult: AnalysisResult | null = null;
-      let animDone = false;
-      let finished = false;
-
-      const tryFinish = () => {
-        if (finished || !dataResult || !animDone) return;
-        if (runIdRef.current !== runId) return;
-        finished = true;
-        setResult(dataResult);
-        setOverlayOn(false);
-        setStepsForRun([]);
-        setLoading(false);
-      };
-
-      // Start animation immediately — plays while data is fetching
-      simulateSteps(setStepsForRun, () => {
-        animDone = true;
-        tryFinish();
-      });
-
-      // Fetch data in parallel (not awaited — runs alongside animation)
-      getAnyStockResultWithLiveMetrics(req).then(demo => {
-        if (runIdRef.current !== runId) return;
-        dataResult = demo;
-        tryFinish();
-      });
-
-      // Failsafe: if either side stalls, force-complete after 15s
-      setTimeout(() => {
-        if (runIdRef.current !== runId || finished) return;
-        setStepsForRun(prev => prev.map(s => ({ ...s, status: "done" })));
-        animDone = true;
-        tryFinish();
-      }, 15000);
-
-      return;
-    }
-
     try {
-      const { analyzeStock } = await import("@/api");
-      if (runIdRef.current !== runId) return;
-      const nextResult = await analyzeStock(req);
+      const nextResult = await getAnyStockResultWithLiveMetrics(req);
       if (runIdRef.current !== runId) return;
       setResult(nextResult);
     } catch (err) {
@@ -167,6 +92,7 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       if (runIdRef.current !== runId) return;
+      setStepsForRun([]);
       setOverlayOn(false);
       setLoading(false);
     }
@@ -197,12 +123,6 @@ export default function App() {
             color: "var(--accent)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Beta
           </span>
-          {USE_DEMO && (
-            <span style={{ fontSize: 9, padding: "3px 8px", border: "1px solid var(--border)",
-              color: "var(--text-dim)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
-              Demo
-            </span>
-          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <span className="nav-disclaimer" style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--text-muted)" }}>
@@ -247,7 +167,7 @@ export default function App() {
         borderBottom: "1px solid var(--border)",
         background: lightMode ? "rgba(238,235,211,0.97)" : "rgba(10,10,10,0.97)",
         backdropFilter: "blur(10px)",
-        position: "sticky", top: 65, zIndex: 99,
+        position: "sticky", top: 80, zIndex: 99,
         padding: "0 40px",
       }}>
         {(["analyze", "portfolio"] as const).map(page => (
