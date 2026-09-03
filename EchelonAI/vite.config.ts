@@ -825,7 +825,7 @@ function yahooMetricsDevPlugin(groqModel: string, agentPythonBin: string) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const groqModel = env.GROQ_MODEL || process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const groqModel = env.GROQ_MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   const agentPythonBin =
     env.AGENT_PYTHON_BIN ||
     process.env.AGENT_PYTHON_BIN ||

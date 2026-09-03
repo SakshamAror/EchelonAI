@@ -26,10 +26,19 @@ if str(AGENTS_DIR) not in sys.path:
 FINANCIAL_IMPORT_ERROR: Optional[str] = None
 SEARCH_IMPORT_ERROR: Optional[str] = None
 SEC_IMPORT_ERROR: Optional[str] = None
+REDDIT_IMPORT_ERROR: Optional[str] = None
+DIVERGENCE_IMPORT_ERROR: Optional[str] = None
 get_financial_metrics = None
 search_cultural_events = None
 compute_social_score = None
+search_analyst_articles = None
+compute_analyst_score = None
 find_10q_filing = None
+fetch_reddit_posts = None
+score_social = None
+compute_mention_velocity = None
+compute_first_mention_date = None
+compute_divergence = None
 
 try:
     from financial_agent import get_financial_metrics_safe as _get_financial_metrics  # type: ignore  # noqa: E402
@@ -41,13 +50,15 @@ except Exception as exc:  # pragma: no cover - runtime environment dependent
 try:
     from search_agent import (  # type: ignore  # noqa: E402
         compute_social_score as _compute_social_score,
-    )
-    from search_agent import (  # type: ignore  # noqa: E402
         search_cultural_events_safe as _search_cultural_events,
+        search_analyst_articles as _search_analyst_articles,
+        compute_analyst_score as _compute_analyst_score,
     )
 
     compute_social_score = _compute_social_score
     search_cultural_events = _search_cultural_events
+    search_analyst_articles = _search_analyst_articles
+    compute_analyst_score = _compute_analyst_score
 except Exception as exc:  # pragma: no cover - runtime environment dependent
     SEARCH_IMPORT_ERROR = str(exc)
 
@@ -58,6 +69,26 @@ try:
 except Exception as exc:  # pragma: no cover - runtime environment dependent
     SEC_IMPORT_ERROR = str(exc)
 
+try:
+    from reddit_agent import (  # type: ignore  # noqa: E402
+        fetch_reddit_posts as _fetch_reddit_posts,
+        score_social as _score_social,
+        compute_mention_velocity as _compute_mention_velocity,
+        compute_first_mention_date as _compute_first_mention_date,
+        _quarter_unix_bounds,
+    )
+    fetch_reddit_posts = _fetch_reddit_posts
+    score_social = _score_social
+    compute_mention_velocity = _compute_mention_velocity
+    compute_first_mention_date = _compute_first_mention_date
+except Exception as exc:  # pragma: no cover - runtime environment dependent
+    REDDIT_IMPORT_ERROR = str(exc)
+
+try:
+    from cultural_divergence import compute_divergence as _compute_divergence  # type: ignore  # noqa: E402
+    compute_divergence = _compute_divergence
+except Exception as exc:  # pragma: no cover - runtime environment dependent
+    DIVERGENCE_IMPORT_ERROR = str(exc)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch financial + cultural data for a stock/quarter")
@@ -412,14 +443,63 @@ def main() -> None:
                 break
 
     deduped_articles = dedupe_articles(all_articles)
-    if compute_social_score is None:
-        cultural_score = 50.0
-    else:
-        cultural_score = round(compute_social_score(deduped_articles), 2) if deduped_articles else 50.0
+    mainstream_score = round(compute_social_score(deduped_articles), 2) if (compute_social_score and deduped_articles) else 50.0
     cultural_signals = [map_signal(a) for a in deduped_articles]
+
+    # ── Analyst coverage (Seeking Alpha, Motley Fool, Zacks, Barron's, MarketWatch) ──
+    analyst_articles: List[Dict[str, Any]] = []
+    analyst_score: Optional[float] = None
+
+    if search_analyst_articles is not None:
+        for month in quarter_months(quarter):
+            try:
+                batch = search_analyst_articles(company, year, month, ticker=ticker)
+                if isinstance(batch, list):
+                    analyst_articles.extend(batch)
+            except Exception:
+                pass  # non-fatal — analyst lane degrades gracefully
+
+        analyst_articles = dedupe_articles(analyst_articles)
+        if analyst_articles and compute_analyst_score:
+            analyst_score = round(compute_analyst_score(analyst_articles), 2)
+
+    # ── Reddit social signals ─────────────────────────────────────────────────
+    reddit_posts: List[Dict[str, Any]] = []
+    social_score: Optional[float] = None
+    mention_velocity: float = 0.0
+    first_mention_date: Optional[str] = None
+
+    if fetch_reddit_posts is None:
+        errors["social"] = f"reddit_agent import failed: {REDDIT_IMPORT_ERROR or 'unknown error'}"
+    else:
+        try:
+            reddit_posts = fetch_reddit_posts(ticker, company, year, quarter)
+            if reddit_posts and score_social:
+                social_score = score_social(reddit_posts)
+            if reddit_posts and compute_mention_velocity and compute_first_mention_date:
+                start_ts_r, end_ts_r = _quarter_unix_bounds(year, quarter)
+                mention_velocity = compute_mention_velocity(reddit_posts, start_ts_r, end_ts_r)
+                first_mention_date = compute_first_mention_date(reddit_posts)
+        except Exception as exc:
+            errors["social"] = f"Reddit fetch failed: {exc}"
+
+    # Merge Reddit post titles into flat cultural_signals for backward compat
+    for p in reddit_posts:
+        cultural_signals.append({
+            "date": p.get("date", ""),
+            "sentiment": p.get("sentiment", "neutral"),
+            "text": p.get("title", ""),
+            "source": f"r/{p.get('subreddit', 'reddit')}",
+            "title": p.get("title", ""),
+            "url": p.get("url", ""),
+            "content": "",
+            "relevanceScore": 0.0,
+        })
 
     # SEC EDGAR 10-Q filing
     sec_filing: Optional[Dict[str, Any]] = None
+    sec_score: Optional[float] = None
+    sec_tone: str = "neutral"
     if find_10q_filing is None:
         errors["secFiling"] = f"sec_agent import failed: {SEC_IMPORT_ERROR or 'unknown error'}"
     else:
@@ -428,6 +508,8 @@ def main() -> None:
             if isinstance(raw_sec, dict) and raw_sec.get("error"):
                 errors["secFiling"] = str(raw_sec["error"])
             elif isinstance(raw_sec, dict):
+                sec_score = raw_sec.get("sec_score")
+                sec_tone = raw_sec.get("sec_tone") or "neutral"
                 sec_filing = {
                     "filingUrl": raw_sec.get("filing_url", ""),
                     "documentUrl": raw_sec.get("document_url", ""),
@@ -484,6 +566,76 @@ def main() -> None:
                 })
         price_chart["eventPoints"] = event_points
 
+    # ── Cultural breakdown + blended score ───────────────────────────────────
+    divergence_dict: Dict[str, Any] = {
+        "mainstreamVsSocial": None,
+        "leadLagDays": None,
+        "signalType": "unknown",
+    }
+    if compute_divergence is not None:
+        try:
+            divergence_dict = compute_divergence(
+                mainstream_score,
+                social_score,
+                sec_score,
+                deduped_articles,   # raw mainstream articles before reddit merge
+                reddit_posts,
+            )
+        except Exception:
+            pass
+
+    # Weighted blend: mainstream 35%, analyst 20%, social 30%, sec 15%
+    # Gracefully degrades — missing lanes have their weight redistributed proportionally
+    weights = []
+    weighted_sum = 0.0
+    for val, w in [
+        (mainstream_score, 0.35),
+        (analyst_score,    0.20),
+        (social_score,     0.30),
+        (sec_score,        0.15),
+    ]:
+        if val is not None:
+            weights.append(w)
+            weighted_sum += val * w
+    cultural_score = round(weighted_sum / sum(weights), 2) if weights else 50.0
+
+    cultural_breakdown: Dict[str, Any] = {
+        "mainstream": {
+            "score": mainstream_score,
+            "articles": [s for s in cultural_signals if not s.get("source", "").startswith("r/")],
+        },
+        "analyst": {
+            "score": analyst_score,
+            "articles": [map_signal(a) for a in analyst_articles],
+        },
+        "social": {
+            "score": social_score,
+            "posts": [
+                {
+                    "id": p.get("id", ""),
+                    "title": p.get("title", ""),
+                    "score": p.get("score", 0),
+                    "numComments": p.get("num_comments", 0),
+                    "createdUtc": p.get("created_utc", 0),
+                    "subreddit": p.get("subreddit", ""),
+                    "url": p.get("url", ""),
+                    "sentiment": p.get("sentiment", "neutral"),
+                    "date": p.get("date", ""),
+                }
+                for p in reddit_posts
+            ],
+            "mentionVelocity": mention_velocity,
+            "firstMentionDate": first_mention_date,
+        },
+        "sec": {
+            "score": sec_score,
+            "highlights": (sec_filing or {}).get("highlights", []),
+            "tone": sec_tone,
+        },
+        "divergence": divergence_dict,
+        "score": cultural_score,
+    }
+
     financial_score = compute_financial_score(financial_metrics)
     alpha_score = round(clamp(0.65 * financial_score + 0.35 * cultural_score), 2)
 
@@ -502,6 +654,7 @@ def main() -> None:
         "priceChart": price_chart,
         "priceDeltaPercent": delta_price,
         "secFiling": sec_filing,
+        "cultural": cultural_breakdown,
         "sources": build_sources(cultural_signals, ticker),
         "errors": errors,
     }

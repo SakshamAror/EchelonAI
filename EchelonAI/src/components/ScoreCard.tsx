@@ -4,6 +4,12 @@
 
 import type { AnalysisResult } from "@/types";
 
+const SIGNAL_TYPE_BADGE: Record<string, { label: string; color: string }> = {
+  early_signal: { label: "EARLY SIGNAL", color: "var(--teal, #22d3ee)" },
+  fade:         { label: "FADE",         color: "var(--red, #f87171)"  },
+  split:        { label: "SPLIT",        color: "var(--accent)"        },
+};
+
 interface Props { result: AnalysisResult; error?: string }
 
 function fmtTF({ quarter, year }: { quarter: number; year: number }) {
@@ -125,8 +131,36 @@ export default function ScoreCard({ result, error }: Props) {
         {/* Score bars */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <ScoreBarRow label="Echelon Score"  value={result.alphaScore}      color="var(--accent)"  />
-          <ScoreBarRow label="Cultural"       value={result.culturalScore}   color="var(--purple)"  />
-          <ScoreBarRow label="Financial"      value={result.financialScore}  color="var(--green)"   />
+          {result.culturalBreakdown ? (
+            <>
+              <ScoreBarRow label="Mainstream" value={result.culturalBreakdown.mainstream.score}          color="var(--purple)" />
+              {result.culturalBreakdown.analyst && (
+                <ScoreBarRow label="Analyst"   value={result.culturalBreakdown.analyst.score ?? 0}       color="#a78bfa" />
+              )}
+              <ScoreBarRow label="Social"     value={result.culturalBreakdown.social.score ?? 0}        color="var(--teal, #22d3ee)" />
+              <ScoreBarRow label="SEC Tone"   value={result.culturalBreakdown.sec.score ?? 0}            color="var(--accent)" />
+            </>
+          ) : (
+            <ScoreBarRow label="Cultural" value={result.culturalScore} color="var(--purple)" />
+          )}
+          <ScoreBarRow label="Financial" value={result.financialScore} color="var(--green)" />
+          {/* Signal type badge */}
+          {result.culturalBreakdown?.divergence?.signalType &&
+            result.culturalBreakdown.divergence.signalType !== "aligned" &&
+            result.culturalBreakdown.divergence.signalType !== "unknown" && (() => {
+              const cfg = SIGNAL_TYPE_BADGE[result.culturalBreakdown!.divergence.signalType];
+              return cfg ? (
+                <span style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em",
+                  textTransform: "uppercase", color: cfg.color,
+                  padding: "3px 8px", border: `1px solid ${cfg.color}`,
+                  alignSelf: "flex-start", marginTop: 2,
+                }}>
+                  {cfg.label}
+                </span>
+              ) : null;
+            })()
+          }
         </div>
       </div>
 
@@ -152,7 +186,7 @@ export default function ScoreCard({ result, error }: Props) {
             {
               label: "Cultural Score (35% of Echelon)",
               color: "var(--purple)",
-              desc: "Sentiment of news articles fetched via Tavily, weighted by outlet traffic (Reuters, Bloomberg, CNBC, WSJ, FT, etc. rank higher). Positive/negative article sentiment shifts the score from the 78-point baseline. A single outlet's weight is capped at 35% of total to prevent outsized influence.",
+              desc: "Blended from four lanes: Mainstream media (35% — Reuters, Bloomberg, CNBC, WSJ via Tavily), Analyst coverage (20% — Seeking Alpha, Motley Fool, Zacks, Barron's, MarketWatch), Social (30% — Reddit r/wallstreetbets, r/investing, r/stocks, upvote-weighted), and SEC Tone (15% — 10-Q MD&A confidence vs hedging language). Divergence between lanes is surfaced as a signal type: early_signal, split, fade, or aligned.",
             },
             {
               label: "Echelon Score",

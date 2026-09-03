@@ -10,7 +10,7 @@
     "metrics:yahoo": "node scripts/fetch-yfinance-metrics.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.0",
+    "@supabase/supabase-js": "^2.111.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.460.0",
     "papaparse": "^5.5.4",

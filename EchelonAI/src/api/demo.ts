@@ -56,6 +56,48 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       { title: "WSJ: Short Interest Report", url: "#", date: "2024-09-22", type: "news" },
       { title: "Nia · Hypebeast Index", url: "#", date: "2024-09-14", type: "web" },
     ],
+    culturalBreakdown: {
+      mainstream: {
+        score: 28,
+        articles: [
+          { date: "Sep 7",  sentiment: "neg",     text: "Nike lowers FY25 revenue guidance; CEO Elliott Hill takes over amid DTC strategy pivot.", source: "Reuters" },
+          { date: "Sep 22", sentiment: "neg",     text: "Short interest reaches 18-month high as institutional sell-off accelerates.", source: "WSJ" },
+        ],
+      },
+      analyst: {
+        score: 32,
+        articles: [
+          { date: "Sep 5",  sentiment: "neg",     text: "Nike downgraded to Neutral at Goldman Sachs on slowing DTC momentum and China headwinds. Price target cut from $95 to $80.", source: "Seeking Alpha" },
+          { date: "Sep 10", sentiment: "neg",     text: "Zacks reiterates Sell rating: revenue guidance cut signals deeper structural issues than the market has priced in.", source: "Zacks" },
+          { date: "Sep 19", sentiment: "neutral", text: "Motley Fool: Nike brand remains durable but near-term catalysts are scarce. Patient investors may find value at current levels.", source: "Motley Fool" },
+        ],
+      },
+      social: {
+        score: 35,
+        posts: [
+          { id: "demo1", title: "NKE puts printing — CEO change spooked the market", score: 4200, numComments: 312, createdUtc: 1725667200, subreddit: "wallstreetbets", url: "#", sentiment: "neg", date: "2024-09-07" },
+          { id: "demo2", title: "On Running and HOKA taking Nike's lunch in performance running", score: 2100, numComments: 187, createdUtc: 1726099200, subreddit: "investing", url: "#", sentiment: "neg", date: "2024-09-12" },
+          { id: "demo3", title: "Bought NKE dip — brand is still gold at this valuation", score: 980, numComments: 94, createdUtc: 1726704000, subreddit: "stocks", url: "#", sentiment: "pos", date: "2024-09-19" },
+        ],
+        mentionVelocity: 4.2,
+        firstMentionDate: "2024-09-03",
+      },
+      sec: {
+        score: 40,
+        highlights: [
+          "Revenues decreased 10% compared to the prior year period, reflecting softness across North America and Greater China.",
+          "Gross margin contracted 150 basis points due to elevated promotional activity required to reduce inventory levels.",
+          "The company faces continued macroeconomic uncertainty and competitive headwinds in key markets.",
+        ],
+        tone: "cautious",
+      },
+      divergence: {
+        mainstreamVsSocial: -7,
+        leadLagDays: -3,
+        signalType: "split",
+      },
+      score: 33,
+    },
   },
 
   // ─── NVIDIA Q3 2024 ───────────────────────────────────────────────────────
@@ -108,6 +150,49 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       { title: "The Verge: Blackwell Unveiled", url: "#", date: "2024-08-06", type: "news" },
       { title: "Reuters: Nvidia Analyst Upgrades", url: "#", date: "2024-08-29", type: "news" },
     ],
+    culturalBreakdown: {
+      mainstream: {
+        score: 88,
+        articles: [
+          { date: "Aug 6",  sentiment: "pos", text: "Blackwell GPU shipment acceleration confirmed — hyperscaler orders surge beyond capacity.", source: "The Verge" },
+          { date: "Aug 22", sentiment: "pos", text: "Q2 FY2025 earnings: revenue $30B vs $28.6B estimate. Jensen Huang calls AI compute demand \"insane\".", source: "Bloomberg" },
+          { date: "Aug 28", sentiment: "pos", text: "14 of 15 sell-side analysts raise price targets post-earnings; retail forum volume hits all-time high.", source: "Reuters" },
+        ],
+      },
+      analyst: {
+        score: 93,
+        articles: [
+          { date: "Aug 7",  sentiment: "pos", text: "Seeking Alpha Strong Buy: Blackwell architecture creates a 2-year competitive moat. Raise price target to $160.", source: "Seeking Alpha" },
+          { date: "Aug 22", sentiment: "pos", text: "Barron's: Nvidia's earnings were a masterclass — $30B revenue, raised guidance, special dividend. Conviction very high.", source: "Barron's" },
+          { date: "Aug 29", sentiment: "pos", text: "Motley Fool: Every AI infrastructure dollar eventually flows through Nvidia. Price target raised to $175.", source: "Motley Fool" },
+        ],
+      },
+      social: {
+        score: 85,
+        posts: [
+          { id: "nvda1", title: "NVDA to $200 — Blackwell sold out through 2025, Jensen is literally printing money", score: 12400, numComments: 891, createdUtc: 1722902400, subreddit: "wallstreetbets", url: "#", sentiment: "pos", date: "2024-08-06" },
+          { id: "nvda2", title: "Earnings reaction: $30B revenue. I don't even know what to say. Calls printing.", score: 8700, numComments: 623, createdUtc: 1724284800, subreddit: "wallstreetbets", url: "#", sentiment: "pos", date: "2024-08-22" },
+          { id: "nvda3", title: "Bought more NVDA on the dip — every hyperscaler is locked into H100 for 2+ more years", score: 3200, numComments: 241, createdUtc: 1724716800, subreddit: "investing", url: "#", sentiment: "pos", date: "2024-08-27" },
+        ],
+        mentionVelocity: 18.6,
+        firstMentionDate: "2024-08-01",
+      },
+      sec: {
+        score: 82,
+        highlights: [
+          "Data center revenue reached $26.3 billion, an increase of 154% from the prior year period.",
+          "We are increasing our quarterly dividend and expect to generate strong free cash flow through the fiscal year.",
+          "Demand for our Hopper and Blackwell GPU architectures continues to significantly exceed our supply capacity.",
+        ],
+        tone: "confident",
+      },
+      divergence: {
+        mainstreamVsSocial: 3,
+        leadLagDays: 2,
+        signalType: "aligned",
+      },
+      score: 88,
+    },
   },
 
   // ─── TESLA Q4 2023 ────────────────────────────────────────────────────────
@@ -160,6 +245,49 @@ export const DEMO_RESULTS: Record<string, AnalysisResult> = {
       { title: "FT: BYD Overtakes Tesla", url: "#", date: "2024-01-02", type: "news" },
       { title: "NYT: Musk Brand Risk", url: "#", date: "2023-11-28", type: "news" },
     ],
+    culturalBreakdown: {
+      mainstream: {
+        score: 35,
+        articles: [
+          { date: "Dec 2",  sentiment: "neg",     text: "BYD officially surpasses Tesla in Q4 global EV deliveries for the first time — a sustained negative press cycle begins.", source: "FT" },
+          { date: "Dec 11", sentiment: "neg",     text: "Elon Musk's X platform advertiser exodus intensifies; brand association risk elevated in brand safety surveys.", source: "NYT" },
+          { date: "Dec 20", sentiment: "neutral", text: "Cybertruck deliveries begin but ramp disappoints; early reviews cite build quality and range concerns.", source: "Ars Technica" },
+        ],
+      },
+      analyst: {
+        score: 42,
+        articles: [
+          { date: "Dec 5",  sentiment: "neg",     text: "Barron's: BYD milestone is a structural signal, not a fluke. Tesla's China growth story has an expiration date.", source: "Barron's" },
+          { date: "Dec 14", sentiment: "neutral", text: "Seeking Alpha Bull Case: Margin compression is priced in; FSD and energy storage are the 2024 upside drivers to watch.", source: "Seeking Alpha" },
+          { date: "Dec 21", sentiment: "neg",     text: "Zacks reiterates Sell: Auto gross margin decline to sub-18% breaks the profitability bull thesis.", source: "Zacks" },
+        ],
+      },
+      social: {
+        score: 48,
+        posts: [
+          { id: "tsla1", title: "BYD actually beat Tesla globally — this is a major turning point for the EV bull thesis", score: 5600, numComments: 478, createdUtc: 1701475200, subreddit: "investing", url: "#", sentiment: "neg", date: "2023-12-02" },
+          { id: "tsla2", title: "Bought more TSLA on this dip — FSD is still years ahead of anything BYD has", score: 1800, numComments: 195, createdUtc: 1701907200, subreddit: "stocks", url: "#", sentiment: "pos", date: "2023-12-07" },
+          { id: "tsla3", title: "Musk controversy is a real brand risk — surveys showing damage with key demographics", score: 3100, numComments: 312, createdUtc: 1702166400, subreddit: "wallstreetbets", url: "#", sentiment: "neg", date: "2023-12-10" },
+        ],
+        mentionVelocity: 6.8,
+        firstMentionDate: "2023-12-01",
+      },
+      sec: {
+        score: 38,
+        highlights: [
+          "Automotive gross margin decreased to 17.6% primarily due to vehicle average selling price reductions and increased Cybertruck launch costs.",
+          "We continue to execute our pricing strategy to maintain volume growth in a challenging macroeconomic and competitive demand environment.",
+          "Competition from domestic EV manufacturers in China presents ongoing uncertainty for our regional revenue growth trajectory.",
+        ],
+        tone: "cautious",
+      },
+      divergence: {
+        mainstreamVsSocial: -13,
+        leadLagDays: -1,
+        signalType: "aligned",
+      },
+      score: 40,
+    },
   },
 };
 
@@ -214,9 +342,11 @@ interface AgentDataResponse {
     companyName?: string;
     highlights?: string[];
   } | null;
+  cultural?: import("@/types").CulturalBreakdown | null;
   errors?: {
     financial?: string;
     cultural?: string;
+    social?: string;
     priceChart?: string;
     secFiling?: string;
   };
@@ -1047,9 +1177,11 @@ async function buildLiveResultFromBase(
             highlights: Array.isArray(payload.secFiling.highlights) ? payload.secFiling.highlights : [],
           } as SecFiling
         : null,
+      culturalBreakdown: payload.cultural ?? null,
       dataErrors: {
         financial: payload.errors?.financial,
         cultural: payload.errors?.cultural,
+        social: payload.errors?.social,
         forumChart: payload.errors?.priceChart ?? (livePriceChart ? undefined : "Stock price chart is unavailable for this ticker/quarter."),
         sources: payload.sources && payload.sources.length > 0 ? undefined : "No source links returned by the search agent.",
         secFiling: payload.errors?.secFiling,

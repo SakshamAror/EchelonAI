@@ -7,6 +7,7 @@ import type { AnalysisResult } from "@/types";
 import ScoreCard from "./ScoreCard";
 import ForumChart from "./ForumChart";
 import CulturalSignals from "./CulturalSignals";
+import DivergencePanel from "./DivergencePanel";
 import MetricsPanel from "./MetricsPanel";
 import SecFilingPanel from "./SecFilingPanel";
 import SourcesList from "./SourcesList";
@@ -253,13 +254,22 @@ export default function ResultsPanel({ result }: Props) {
       {/* 3 — Synthesis (LLM summary + signal bullets) */}
       <AlphaSynthesis result={result} onJumpToDetail={jumpToDetail} />
 
-      {/* 4 — Chart + Cultural signals side by side */}
+      {/* 4 — Divergence panel (only when breakdown is available) */}
+      {result.culturalBreakdown && (
+        <DivergencePanel
+          breakdown={result.culturalBreakdown}
+          financialScore={result.financialScore}
+        />
+      )}
+
+      {/* 5 — Chart + Cultural signals */}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }} className="fade-up fade-up-3">
         <ForumChart data={result.forumChart} error={result.dataErrors?.forumChart} />
         <CulturalSignals
           signals={result.culturalSignals}
           error={result.dataErrors?.cultural}
           expandForDeepLink={expandCulturalForDetail}
+          breakdown={result.culturalBreakdown}
         />
       </div>
 

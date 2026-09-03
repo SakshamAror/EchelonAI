@@ -158,15 +158,69 @@ export interface AnalysisResult {
   sources: Source[];
   secFiling?: SecFiling | null;
   peerCohort?: PeerCohort | null;
+  culturalBreakdown?: CulturalBreakdown | null;
   dataErrors?: {
     scorecard?: string;
     forumChart?: string;
     financial?: string;
     cultural?: string;
+    social?: string;
     synthesis?: string;
     sources?: string;
     secFiling?: string;
   };
+}
+
+// ── Cultural breakdown (split-source scoring) ─────────────────────────────────
+
+export interface RedditPost {
+  id: string;
+  title: string;
+  score: number;
+  numComments: number;
+  createdUtc: number;
+  subreddit: string;
+  url: string;
+  sentiment: "pos" | "neg" | "neutral";
+  date: string;
+}
+
+export interface SocialLane {
+  score: number;
+  posts: RedditPost[];
+  mentionVelocity: number;
+  firstMentionDate?: string | null;
+}
+
+export interface MainstreamLane {
+  score: number;
+  articles: CulturalSignal[];
+}
+
+export interface AnalystLane {
+  score: number | null;
+  articles: CulturalSignal[];
+}
+
+export interface SecLane {
+  score: number;
+  highlights: string[];
+  tone: "cautious" | "confident" | "neutral";
+}
+
+export interface DivergenceMetrics {
+  mainstreamVsSocial: number | null;
+  leadLagDays: number | null;
+  signalType: "early_signal" | "fade" | "aligned" | "split" | "unknown";
+}
+
+export interface CulturalBreakdown {
+  mainstream: MainstreamLane;
+  analyst?: AnalystLane | null;
+  social: SocialLane;
+  sec: SecLane;
+  divergence: DivergenceMetrics;
+  score: number;
 }
 
 // Agent progress

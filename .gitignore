@@ -15,10 +15,20 @@ backend/.env.*
 frontend/.env
 frontend/.env.*
 
+# Python
 __pycache__/
 *.pyc
+.venv/
+venv/
 
+# Dependencies
 node_modules/
+
+# Build output & caches
 dist/
-.DS_Store
+build/
+.vite/
+*.tsbuildinfo
+
+# Editor / tooling
 .claude/

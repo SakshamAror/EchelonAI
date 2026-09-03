@@ -282,7 +282,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--company",     required=True)
     parser.add_argument("--quarter",     type=int, required=True)
     parser.add_argument("--year",        type=int, required=True)
-    parser.add_argument("--groq-model",  default="llama-3.3-70b-versatile")
+    parser.add_argument("--groq-model",  default="openai/gpt-oss-120b")
     return parser.parse_args()
 
 

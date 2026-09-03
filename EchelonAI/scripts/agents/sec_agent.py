@@ -294,6 +294,47 @@ def _extract_highlights(html_bytes: bytes) -> List[str]:
     return ordered
 
 
+# ── SEC tone scoring ─────────────────────────────────────────────────────────
+
+_UNCERTAINTY_MARKERS = [
+    "may", "might", "could", "risk", "risks", "uncertain", "uncertainty",
+    "challenging", "headwinds", "headwind", "cannot guarantee", "subject to",
+    "difficult", "volatility", "adverse", "unfavorable", "weakness", "weaknesses",
+    "deterioration", "below expectations", "slower than", "pressures", "pressure",
+    "competition", "inflationary", "macroeconomic", "restructuring",
+]
+
+_CONFIDENCE_MARKERS = [
+    "exceeded", "record", "strong growth", "momentum", "ahead of",
+    "increased guidance", "outperformed", "exceeded expectations", "higher than",
+    "growth acceleration", "record revenue", "record profit", "strong demand",
+    "robust", "significant growth", "raised", "expanded", "increasing",
+    "accelerating", "favorable", "improved", "above", "continued growth",
+]
+
+
+def score_sec_tone(highlights: List[str]) -> float:
+    """
+    Score the MD&A highlights for management tone.
+    Returns float in [0, 100]:  < 45 = cautious,  > 60 = confident,  else neutral.
+    """
+    if not highlights:
+        return 50.0
+    full_text = " ".join(highlights).lower()
+    uncertainty = sum(1 for m in _UNCERTAINTY_MARKERS if m in full_text)
+    confidence = sum(1 for m in _CONFIDENCE_MARKERS if m in full_text)
+    score = 50.0 + (confidence - uncertainty) * 8.0
+    return round(max(0.0, min(100.0, score)), 2)
+
+
+def classify_sec_tone(score: float) -> str:
+    if score < 45:
+        return "cautious"
+    if score > 60:
+        return "confident"
+    return "neutral"
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def find_10q_filing(ticker: str, year: int, quarter: int) -> Dict:
@@ -364,6 +405,10 @@ def find_10q_filing(ticker: str, year: int, quarter: int) -> Dict:
         result["highlights"] = _extract_highlights(b"".join(chunks))
     except Exception:
         pass
+
+    # Step 5 — Score management tone from highlights
+    result["sec_score"] = score_sec_tone(result.get("highlights", []))
+    result["sec_tone"] = classify_sec_tone(result["sec_score"])
 
     return result
 

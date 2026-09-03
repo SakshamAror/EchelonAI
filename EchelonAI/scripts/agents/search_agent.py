@@ -26,6 +26,36 @@ REPUTABLE_DOMAINS = {
     "theguardian.com",
 }
 
+ANALYST_DOMAINS = [
+    "seekingalpha.com",
+    "fool.com",
+    "zacks.com",
+    "barrons.com",
+    "marketwatch.com",
+    "investopedia.com",
+    "thestreet.com",
+]
+
+ANALYST_OUTLET_MAP = {
+    "seekingalpha.com": "Seeking Alpha",
+    "fool.com": "Motley Fool",
+    "zacks.com": "Zacks",
+    "barrons.com": "Barron's",
+    "marketwatch.com": "MarketWatch",
+    "investopedia.com": "Investopedia",
+    "thestreet.com": "TheStreet",
+}
+
+ANALYST_OUTLET_TRAFFIC = {
+    "Seeking Alpha": {"monthly_volume": 32000, "estimated_clicks": 28000},
+    "Motley Fool":   {"monthly_volume": 18500, "estimated_clicks": 16000},
+    "Zacks":         {"monthly_volume": 11200, "estimated_clicks":  9800},
+    "Barron's":      {"monthly_volume": 15400, "estimated_clicks": 13200},
+    "MarketWatch":   {"monthly_volume": 42000, "estimated_clicks": 36000},
+    "Investopedia":  {"monthly_volume": 88000, "estimated_clicks": 72000},
+    "TheStreet":     {"monthly_volume":  9100, "estimated_clicks":  7900},
+}
+
 # Monthly traffic and estimated clicks (hardcoded)
 OUTLET_TRAFFIC = {
     "Reuters": {"monthly_volume": 203000, "estimated_clicks": 163000},
@@ -520,6 +550,129 @@ def _finnhub_company_news(ticker: str, year: int, month: int) -> List[Dict[str, 
 
     articles.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
     return articles[:10]
+
+
+def compute_analyst_score(articles: List[Dict[str, object]]) -> float:
+    """
+    Analyst-coverage-weighted score using investment-site traffic weights.
+    Same mechanics as compute_social_score but uses ANALYST_OUTLET_TRAFFIC.
+    """
+    if not articles:
+        return 50.0
+
+    weights = []
+    sentiment_vals = []
+    impacts = []
+    for a in articles:
+        outlet = str(a.get("outlet", "")).strip()
+        data = ANALYST_OUTLET_TRAFFIC.get(outlet)
+        if data:
+            base = 0.6 * data["monthly_volume"] + 0.4 * data["estimated_clicks"]
+            w = (base ** 0.5) / 100.0
+        else:
+            w = 1.0
+        weights.append(w)
+        sentiment_vals.append(_sentiment_value(str(a.get("sentiment", "yellow"))))
+        impacts.append(float(a.get("relevance_score", 0.0)))
+
+    norm_weights = _cap_outlet_weights(weights, cap_ratio=0.35)
+    sentiment_index = sum(w * s for w, s in zip(norm_weights, sentiment_vals))
+    pos_w = sum(w for w, s in zip(norm_weights, sentiment_vals) if s > 0)
+    neg_w = sum(w for w, s in zip(norm_weights, sentiment_vals) if s < 0)
+    polarity_ratio = (pos_w - neg_w) / (pos_w + neg_w + 1e-6)
+    avg_impact = sum(impacts) / max(len(impacts), 1)
+    impact_index = min(1.0, avg_impact / 12.0)
+
+    score = 78.0 + 40.0 * sentiment_index + 10.0 * polarity_ratio + 5.0 * impact_index
+    return max(0.0, min(100.0, score))
+
+
+def search_analyst_articles(term: str, year: int, month: int, ticker: str = "") -> List[Dict[str, object]]:
+    """
+    Search investment-analysis sites (Seeking Alpha, Motley Fool, Zacks, Barron's, MarketWatch)
+    for analyst coverage of a company during a specific month.
+    Uses Tavily include_domains to restrict results to analyst outlets.
+    """
+    if not term or not isinstance(term, str):
+        raise ValueError("term must be a non-empty string")
+
+    month_name = _month_name(month)
+    last_day = calendar.monthrange(year, month)[1]
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{last_day:02d}"
+
+    load_dotenv()
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        raise RuntimeError("TAVILY_API_KEY is not set.")
+
+    client = TavilyClient(api_key=api_key)
+
+    if ticker:
+        query = f"{ticker} {term} analyst rating buy sell target {month_name} {year}"
+    else:
+        query = f"{term} stock analysis rating {month_name} {year}"
+
+    try:
+        response = client.search(
+            query=query,
+            search_depth="basic",
+            max_results=8,
+            include_raw_content=False,
+            start_published_date=start_date,
+            end_published_date=end_date,
+            include_domains=ANALYST_DOMAINS,
+        )
+    except Exception:
+        # include_domains may not be supported in older SDK; fall back without domain filter
+        response = client.search(
+            query=query,
+            search_depth="basic",
+            max_results=8,
+            include_raw_content=False,
+            start_published_date=start_date,
+            end_published_date=end_date,
+        )
+
+    results = response.get("results", []) if isinstance(response, dict) else []
+
+    articles: List[Dict[str, object]] = []
+    for r in results:
+        title = (r.get("title") or "").strip()
+        url = (r.get("url") or "").strip()
+        content = (r.get("content") or "").strip()
+        if len(content) > 800:
+            content = content[:800].rstrip()
+
+        domain = _domain_from_url(url)
+        # Only keep articles from actual analyst domains (in case fallback returned others)
+        if not any(domain == d or domain.endswith("." + d) for d in ANALYST_DOMAINS):
+            continue
+
+        outlet = ANALYST_OUTLET_MAP.get(domain) or (r.get("source") or "").strip() or _outlet_name_from_url(url)
+        score = _score_article(title, content, url, month_name, year)
+        sentiment = _classify_sentiment(f"{title} {content}")
+        published_date = _extract_date(r)
+
+        articles.append({
+            "title": title,
+            "url": url,
+            "content": content,
+            "relevance_score": score,
+            "sentiment": sentiment,
+            "outlet": outlet,
+            "published_date": published_date,
+        })
+
+    articles = [a for a in articles if _in_month(str(a.get("published_date", "")), year, month)]
+
+    company_words = [w for w in term.lower().split() if len(w) > 2]
+    relevant = [a for a in articles if _is_relevant_to_company(a, company_words, ticker)]
+    if len(relevant) >= 1:
+        articles = relevant
+
+    articles.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+    return articles[:8]
 
 
 def search_cultural_events_safe(term: str, year: int, month: int, ticker: str = "") -> List[Dict[str, object]]:

@@ -21,7 +21,7 @@ const DEFAULT_STEPS: AgentStep[] = [
   { id: "ticker",     label: "Resolving equity and market data",             status: "pending" },
   { id: "financials", label: "Fetching financial metrics via yfinance",      status: "pending" },
   { id: "pricechart", label: "Building quarterly price chart",               status: "pending" },
-  { id: "cultural",   label: "Scanning cultural signals via Tavily",         status: "pending" },
+  { id: "cultural",   label: "Scanning news & social signals",               status: "pending" },
   { id: "scores",     label: "Computing Echelon scores",                     status: "pending" },
   { id: "synthesize", label: "Synthesizing analysis via Groq LLM",          status: "pending" },
 ];
