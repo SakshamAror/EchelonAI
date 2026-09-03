@@ -1,5 +1,6 @@
 // READ instructions.txt before editing this file.
-// Hardcoded demo fixtures. Demo companies: Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023
+// Live stock analysis: resolves a ticker, fetches financial/cultural data, and synthesizes
+// a result via the Groq LLM. Runs entirely through the Vite dev-server middleware endpoints.
 
 import type { AnalysisRequest, AnalysisResult, FinancialMetrics, PeerCohort, ReasoningPoint, SecFiling, Source, TimeFrame } from "@/types";
 
@@ -396,6 +397,7 @@ const METRIC_LABEL: Record<DisplayedMetricKey, string> = {
   trailingPE: "Trailing P/E",
   forwardPE: "Forward P/E",
   pegRatio: "PEG Ratio",
+  interestCoverageRatio: "Interest Coverage Ratio",
   returnOnEquity: "Return on Equity",
   debtToEquity: "Debt/Equity",
   priceToBook: "Price/Book",

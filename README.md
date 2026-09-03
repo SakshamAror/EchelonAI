@@ -58,8 +58,16 @@ Quarterly return % as the hero number, vs-S&P verdict and spread, directional in
 **SEC Filing Highlights**
 Links to the relevant 10-Q/10-K with extracted MD&A highlights for the selected quarter.
 
-**Demo Mode**
-Three pre-built examples — Nike Q3 2024, Nvidia Q3 2024, Tesla Q4 2023 — with live metric overlays fetched on demand. No API keys needed.
+**Portfolio Tracker**
+A second tab (Supabase Google OAuth) tracking real portfolios via CSV upload or a read-only Alpaca
+connection. Trade-replay engine derives positions, realized P&L, an NLV equity curve, and an
+unlevered return curve (return on gross exposure, not equity — flow- **and** leverage-neutral,
+so margin/leverage doesn't distort the % performance) — plotted against SPY with a Value $ / Log /
+Perf % toggle across 1D–ALL ranges. A stats bar covers 14 metrics (Sharpe, Sortino, CAGR, Beta,
+Alpha, Volatility Drag, etc.) in core/advanced tiers. A **Comparison** sub-tab overlays any subset
+of a user's own profiles on that same common, leverage-neutral % basis with a per-profile stats
+table. Full math + architecture in [`PORTFOLIO_MANUAL.md`](PORTFOLIO_MANUAL.md); feature status in
+[`PORTFOLIO_PLAN.md`](PORTFOLIO_PLAN.md).
 
 **Light / Dark Mode**
 Full theme toggle with high-contrast signal colors in both modes.
@@ -207,7 +215,7 @@ Reputable outlets: Reuters, Bloomberg, CNBC, Financial Times, WSJ, AP News, BBC,
 
 - Node.js 20+
 - Python 3.12+
-- API keys: `GROQ_API_KEY`, `TAVILY_API_KEY` — or use Demo Mode without them
+- API keys: `GROQ_API_KEY`, `TAVILY_API_KEY` (can also be entered at runtime via the ⚙ Settings panel)
 
 ### Install
 
@@ -233,10 +241,6 @@ cp .env.example .env
 ```
 
 ```env
-# Set to "false" to enable live analysis (default: true = demo mode)
-VITE_USE_DEMO=true
-
-# Required for live mode
 GROQ_API_KEY=gsk_...
 TAVILY_API_KEY=tvly-...
 
@@ -266,8 +270,8 @@ AIStockScreener/
 │   │   ├── App.tsx                    # Root layout, state, loading orchestration
 │   │   ├── index.css                  # Global styles, CSS variables, bar animation
 │   │   ├── api/
-│   │   │   ├── demo.ts                # Live data fetching + demo fixtures
-│   │   │   └── index.ts               # API wrappers (analyzeStock)
+│   │   │   ├── analysis.ts            # Live ticker resolution + analysis pipeline
+│   │   │   └── index.ts               # Backend API wrappers (analyzeStock/streamAnalysis — unused; see note below)
 │   │   ├── components/
 │   │   │   ├── ScoreCard.tsx          # Quarterly return hero + vs-S&P verdict + score bars
 │   │   │   ├── ForumChart.tsx         # Price chart w/ S&P benchmark (SVG + HTML labels)
@@ -279,12 +283,21 @@ AIStockScreener/
 │   │   │   ├── SecFilingPanel.tsx     # SEC 10-Q/10-K filing highlights
 │   │   │   ├── SourcesList.tsx        # Cited sources list
 │   │   │   ├── SettingsOverlay.tsx    # API key management (localStorage)
-│   │   │   └── ErrorBoundary.tsx      # React error boundary for result sections
+│   │   │   ├── ErrorBoundary.tsx      # React error boundary for result sections
+│   │   │   ├── PortfolioPage.tsx      # Portfolio page shell: auth gate + sub-tabs
+│   │   │   └── portfolio/             # Portfolio tracker — see PORTFOLIO_MANUAL.md
+│   │   │       ├── CsvPortfolio.tsx        # Single-profile dashboard: equity curve, holdings, stats
+│   │   │       ├── ComparisonTab.tsx       # Cross-profile % overlay + stats table
+│   │   │       ├── EquityCurve.tsx         # SVG chart: single or multi-series, linear/log scale
+│   │   │       ├── StatsBar.tsx            # Core/advanced metrics tier bar
+│   │   │       ├── AlpacaConnect.tsx       # Alpaca read-only key connect/sync/edit
+│   │   │       └── ReturnBySymbol.tsx      # Per-symbol return bars
 │   │   └── types/
 │   │       └── index.ts               # TypeScript interfaces
 │   ├── scripts/
 │   │   ├── fetch-agent-data.py        # Main Python bridge (orchestrates agents + cache)
 │   │   ├── fetch-yfinance-metrics.mjs # Live ticker metrics (Node)
+│   │   ├── fetch-yahoo-history.mjs    # OHLC history per range (Node) — RANGE_CONFIG lives here
 │   │   ├── resolve-yahoo-ticker.mjs   # Company → ticker resolution (Node)
 │   │   ├── search-yahoo-equities.mjs  # Equity autocomplete (Node)
 │   │   └── agents/
@@ -294,8 +307,14 @@ AIStockScreener/
 │   ├── .env.example                   # Environment variable reference
 │   ├── .venv/                         # Python virtual environment
 │   └── package.json
+├── PORTFOLIO_MANUAL.md                # Portfolio tab: authoritative math + architecture reference
+├── PORTFOLIO_PLAN.md                  # Portfolio tab: feature checklist (built / planned / pending)
 └── README.md
 ```
+
+> `src/api/index.ts`'s `analyzeStock`/`streamAnalysis` point at a FastAPI backend (`/api/analyze`)
+> that doesn't exist in this repo (only Portfolio-tab SQL schema lives under `backend/`) — currently
+> unused dead code from an earlier planned architecture, kept in case that backend gets built later.
 
 ---
 
@@ -306,6 +325,7 @@ EchelonAI is actively expanding. Planned directions include:
 - **AI-driven stock screener** — surface stocks with unusual signal combinations across a universe of equities, rather than analyzing one at a time
 - **Enhanced benchmarking** — deeper comparison against sector indices, peer groups, and factor benchmarks beyond the S&P 500
 - **Sentiment-driven multi-factor simulation** — a forward-looking layer that models how current cultural and financial signal combinations have historically resolved, enabling hypothesis-driven scenario analysis
+- **Monte Carlo return-path reshuffling** — stationary-bootstrap resampling (contiguous random-length blocks, not plain shuffling) of a portfolio's actual historical returns, preserving volatility clustering, to show the range of max-drawdown/path outcomes those returns could have produced (see `PORTFOLIO_MANUAL.md`)
 
 ---
 

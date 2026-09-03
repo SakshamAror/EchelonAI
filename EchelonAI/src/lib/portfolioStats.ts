@@ -1,11 +1,14 @@
 import type { EquityPoint } from "@/components/portfolio/EquityCurve";
 import type { HistoryRange } from "@/lib/priceApi";
 
-// Trading periods per year by sampling frequency of the selected range's data.
-export function periodsPerYear(range: HistoryRange): number {
-  if (range === "5y") return 52;    // weekly bars
-  if (range === "max") return 12;   // monthly bars
-  return 252;                        // daily (1M/6M/1Y); intraday gated out below
+// Trading periods per year, derived from the actual sampled series (point count over its time
+// span). More robust than a static per-range table: Yahoo's intraday bars include extended-hours
+// prints, so real bar density varies by range/ticker in ways a fixed table can't capture correctly.
+export function periodsPerYear(points: EquityPoint[]): number {
+  if (points.length < 2) return 252;
+  const spanMs = points[points.length - 1].t - points[0].t;
+  const spanYears = spanMs / (365.25 * 86_400_000);
+  return spanYears > 0 ? (points.length - 1) / spanYears : 252;
 }
 
 // Annualized metrics aren't meaningful on very short windows.
@@ -38,6 +41,7 @@ export interface Stats {
   beta: number | null;
   alpha: number | null;          // % annualized
   plRatio: number | null;
+  volatilityDrag: number | null; // % annualized, arithmetic vs geometric gap
 }
 
 function returns(series: EquityPoint[]): number[] {
@@ -70,7 +74,7 @@ export function computeStats(inp: StatsInput): Stats {
   const empty: Stats = {
     pnl: null, totalReturn: null, cagr: null, vsSpy: null, maxDrawdown: null,
     winRate: null, sharpe: null, sortino: null, calmar: null, volatility: null,
-    beta: null, alpha: null, plRatio: null,
+    beta: null, alpha: null, plRatio: null, volatilityDrag: null,
   };
   if (perf.length < 2) return empty;
 
@@ -111,10 +115,20 @@ export function computeStats(inp: StatsInput): Stats {
   const sharpe = canRisk && sd > 0 ? ((mean(rp) - rfPer) / sd) * Math.sqrt(ppy) : null;
 
   const downside = rp.filter(x => x < rfPer).map(x => (x - rfPer) ** 2);
-  const dDev = downside.length ? Math.sqrt(downside.reduce((s, x) => s + x, 0) / downside.length) : 0;
+  const dDev = rp.length ? Math.sqrt(downside.reduce((s, x) => s + x, 0) / rp.length) : 0;
   const sortino = canRisk && dDev > 0 ? ((mean(rp) - rfPer) / dDev) * Math.sqrt(ppy) : null;
 
   const calmar = cagr != null && dd != null && dd < 0 ? cagr / Math.abs(dd) : null;
+
+  // Volatility drag: annualized arithmetic mean return minus annualized geometric mean return
+  // (the gap compounding carves out of the simple average once variance is present).
+  let volatilityDrag: number | null = null;
+  if (canRisk && rp.every(x => x > -1)) {
+    const arithAnnual = (1 + mean(rp)) ** ppy - 1;
+    const geoMean = Math.exp(mean(rp.map(x => Math.log(1 + x)))) - 1;
+    const geoAnnual = (1 + geoMean) ** ppy - 1;
+    volatilityDrag = (arithAnnual - geoAnnual) * 100;
+  }
 
   // Beta / Alpha vs SPY
   let beta: number | null = null, alpha: number | null = null;
@@ -131,6 +145,6 @@ export function computeStats(inp: StatsInput): Stats {
 
   return {
     pnl, totalReturn, cagr, vsSpy, maxDrawdown: dd, winRate,
-    sharpe, sortino, calmar, volatility, beta, alpha, plRatio,
+    sharpe, sortino, calmar, volatility, beta, alpha, plRatio, volatilityDrag,
   };
 }

@@ -11,13 +11,27 @@ See PORTFOLIO_MANUAL.md for the authoritative math + current architecture.
 - ✅ Supabase Google OAuth sign-in; RLS; migrations 0001–0006
 - ✅ Data sources: **CSV upload** (smart column mapping) + **Alpaca direct** (read-only keys, `/alpaca/sync`)
 - ✅ Trade-replay engine: positions (avg-cost, long/short/margin), realized P&L
-- ✅ Equity curve: NLV + **TWR** (deposits/withdrawals neutralized), clipped to first trade, Value/Perf toggle
+- ✅ Equity curve: NLV + **unlevered return index** (flow- and leverage-neutral), clipped to first trade, Value/Perf toggle
 - ✅ Ranges 1D/5D/1M/6M/1Y/5Y/ALL (intraday for 1D/5D); SPY benchmark overlay
 - ✅ Holdings table (live price, day %, mkt value, unrealized, weight); cash-flow editor
 - ✅ Manual holdings profile type **removed** (trade-based only)
-- ✅ Full-width **stats bar**: Core (7) + Advanced (6) tiers via gear toggle (localStorage). TWR-based, risk-free from ^IRX, annualization by data frequency, closed-trade win/PL ratio
+- ✅ Full-width **stats bar**: Core (7) + Advanced (7) tiers via gear toggle (localStorage). Unlevered-return-based, risk-free from ^IRX, annualization by data frequency, closed-trade win/PL ratio
 - ✅ Curve UX: draw-in animation, shimmer skeleton while building, cursor-following tooltip, history cache
-- 🔜 Allocation pie, return-by-symbol, rolling Sharpe, drawdown, sub-tabs, SnapTrade
+- ✅ Equity curve **Log** view (advanced-mode only) — Value $ series on a log y-axis, log-spaced gridlines
+- ✅ Portfolio-page **sub-tabs**: Portfolio (existing dashboard) + **Comparison** (multi-profile % overlay,
+  common-window clipped + rebased, per-profile stats table) — full-bleed sticky bar w/ orange sheen
+- ✅ Alpaca key editing — gear icon on the sync panel to replace stored key/secret without recreating the profile
+- ✅ 1M chart range bumped to 5-minute bars, 6M/1Y bumped to hourly (60m) — all were daily; annualization
+  (`periodsPerYear()`) now derived from the actual sampled series instead of a static per-range guess
+- ✅ **Unlevered (gross-exposure) return basis** — `buildCsvCurves` now computes return on gross
+  exposure instead of equity, so leverage cancels out (verified: 2x-levered vs. unlevered accounts
+  holding identical positions produce byte-identical `performance` curves). Applies to both the
+  single-profile Perf % view and the Comparison tab; both are inherently flow-neutral too, since
+  cash never enters the formula. Single-profile Perf % now renders via `EquityCurve`'s multi-series
+  mode (percent-formatted) instead of the legacy single-line dollar-anchored path, since a %-return
+  series starting at 0 broke the old SPY-rebase-by-multiplication logic.
+- 🔜 Allocation pie, rolling Sharpe, drawdown, SnapTrade, Comparison tab per-symbol overlap/diff
+- 🔜 **Monte Carlo return-path reshuffling** (§9 below) — approved, not yet implemented
 - 🔜 Supabase price/snapshot caching (v1 fetches live), production FastAPI port
 
 ---
@@ -56,7 +70,7 @@ See PORTFOLIO_MANUAL.md for the authoritative math + current architecture.
 - [Y] **2.3 Connection + profile selector** — v1 supports two data sources (manual holdings REMOVED — trade-based only):
     - **CSV upload** — user uploads a trade history (any format; smart column mapping). Rows → `trades` table.
     - **Alpaca (direct)** — user provides a **read-only** Alpaca API key + secret (Access Controls → Read only, so it cannot trade/withdraw — preserves trust). Paper/live. Proxied server-side (dev: Vite middleware `/alpaca/sync`); pulls fills + CSD/CSW cash activities; reconciles starting_cash to match Alpaca's reported cash. Keys in localStorage for dev (production → Vault + backend, or OAuth so the secret is never shared).
-    - Both feed the SAME trade-replay engine (`lib/tradeReplay.ts`) → positions, equity curve, TWR, realized P&L.
+    - Both feed the SAME trade-replay engine (`lib/tradeReplay.ts`) → positions, equity curve, unlevered return, realized P&L.
     - **SnapTrade** — deferred; will be added for OTHER brokers later via the same engine (normalize SnapTrade JSON → trades).
     Each source = a profile (type='csv', `broker` field distinguishes). Dropdown to switch. Data scoped to active profile.
 
@@ -98,11 +112,57 @@ See PORTFOLIO_MANUAL.md for the authoritative math + current architecture.
 
 ## 7. Sub-tabs
 
+- [Y] **7.0 Portfolio-page sub-tabs (built)** — Top-level split above everything else on the Portfolio
+  page: **Portfolio** (single-profile dashboard, §7.1 below) and **Comparison** (§8). Distinct from
+  §7.2–7.5 below, which are still-pending sub-tabs *within* the single-profile dashboard itself.
 - [Y] **7.1 Portfolio tab** — Default. All approved charts: equity curve, pie chart, return by symbol, rolling sharpe, drawdown.
 - [?] **7.2 Positions tab** — Full-width expanded positions table.
 - [?] **7.3 Trades tab** — Closed trades: entry/exit date, qty, prices, P&L, hold time. Filterable. CSV export.
 - [?] **7.4 Orders tab** — Pending/filled orders from SnapTrade.
 - [?] **7.5 Per-stock tab** — Deep per-stock statistics (contents TBD).
+
+---
+
+## 8. Comparison Tab
+
+- [Y] **8.1 Profile multi-select** — Checklist of the user's profiles, any combination, persisted in
+  `localStorage`. Stable per-profile color (hash of profile id), independent of selection order.
+- [Y] **8.2 Independent timeframe** — Own 1D–ALL range bar, separate state from the Portfolio tab.
+- [Y] **8.3 Overlay chart** — Each selected profile's unlevered return plotted on the same % axis,
+  clipped to the window where all selected profiles have data, rebased to 0% at that common start.
+  SPY always included as a dashed reference line. See PORTFOLIO_MANUAL.md for the exact rebasing math.
+- [Y] **8.4 Stats table** — Profiles × metrics grid, same core/advanced tier toggle as the single-profile
+  Stats Bar, computed over the same common window as the chart.
+- [ ] **8.5 Per-symbol overlap/diff** — Deferred fast-follow: shared tickers across selected profiles,
+  weight in each, overlap indicator. Not started.
+- [Y] **8.6 Unlevered (gross-exposure) return basis** — Shipped. `buildCsvCurves` computes
+  `r(t) = Σ[qty_i(t-1)×Δprice_i(t)] / Σ|qty_i(t-1)×price_i(t-1)|` so a leveraged and unleveraged
+  profile holding the same positions produce identical curves — leverage cancels out of both
+  numerator and denominator (numerically verified). See PORTFOLIO_MANUAL.md's Comparison Tab section.
+  See PORTFOLIO_MANUAL.md's Comparison Tab callout for the full explanation.
+
+---
+
+## 9. Monte Carlo Reshuffling
+
+- [Y] **9.1 Return-path reshuffling via stationary bootstrap** — Approved, not yet implemented.
+  Resample the actual periodic return series in **contiguous random-length blocks** (Politis &
+  Romano stationary bootstrap, circular wrap-around), not a plain i.i.d. permutation — preserves
+  volatility clustering (bad days really do cluster in real markets; naive shuffling would scatter
+  them and understate real drawdown risk). Sampling is with replacement, so unlike plain
+  permutation, **ending value also varies** across simulations, not just the path — this is a
+  genuine joint path+outcome distribution for the historical window, not a fixed-outcome
+  path-risk-only view. See PORTFOLIO_MANUAL.md for the full algorithm, fan chart design, and mean
+  block-length parameter guidance.
+- [?] **9.2 Cash-flow interaction** — Deferred design question: does reshuffling also re-run
+  deposit/withdrawal timing against the resampled sequence (classic retirement-style
+  sequence-of-returns risk, more insightful but only applies to profiles with real flows), or stay
+  pure-return-series only (simpler, always applicable)? Recommend starting with pure-return-series.
+- [?] **9.3 Placement** — Likely an [ADVANCED] panel alongside Rolling Sharpe / Drawdown on the
+  single-profile Portfolio tab, scoped to the selected timeframe. Not confirmed.
+- [?] **9.4 Mean block length (`L`)** — Deferred tuning question: a fixed default (~15–20 periods
+  for daily-ish data) vs. a user-adjustable slider. Too short degenerates toward plain i.i.d.
+  bootstrap (loses clustering); too long makes simulations look nearly identical to the real path.
 
 ---
 

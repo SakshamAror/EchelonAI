@@ -137,8 +137,8 @@ export function replayPositions(
 
 export interface CsvCurves {
   nlv: EquityPoint[];          // account value in $ (includes deposited cash)
-  performance: EquityPoint[];  // TWR growth, flow-neutral, scaled to start at nlv[0]
-  twrPct: number;              // total time-weighted return %
+  performance: EquityPoint[];  // unlevered return index, scaled to start at 100
+  unleveredPct: number;        // total unlevered return %
 }
 
 const dayMs = (iso: string) => new Date(iso + "T00:00:00Z").getTime();
@@ -146,9 +146,12 @@ const dayMs = (iso: string) => new Date(iso + "T00:00:00Z").getTime();
 /**
  * Build both curves from a dated trade log + cash flows:
  *  - NLV(t) = cash(t) + Σ qty_i(t)×price_i(t), where cash includes external flows
- *  - Performance = Time-Weighted Return index (external flows neutralized), so
- *    deposits/withdrawals never register as gains/losses.
- * Idle cash, margin (negative cash), and shorts (negative qty) all fall out naturally.
+ *  - Performance = unlevered return index — P&L on held positions divided by their gross
+ *    market value each interval, ignoring cash/margin sizing entirely. This makes leverage
+ *    cancel out of both numerator and denominator (a 3x-margined and unlevered account
+ *    holding the same positions produce the same curve), and is inherently flow-neutral
+ *    too since cash never enters the calculation.
+ * Idle cash, margin (negative cash), and shorts (negative qty) all fall out naturally in NLV.
  */
 export function buildCsvCurves(
   trades: ReplayTrade[],
@@ -159,6 +162,10 @@ export function buildCsvCurves(
 ): CsvCurves {
   const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date));
   const sortedFlows = [...flows].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Per-axis-point position snapshot (qty + price per held ticker), captured alongside NLV
+  // so the unlevered-return pass below can reuse it instead of re-walking trades/prices.
+  const posSnapshots: Map<string, { qty: number; price: number }>[] = [];
 
   const nlv: EquityPoint[] = axis.map(t => {
     const qtyByTicker = new Map<string, number>();
@@ -171,6 +178,7 @@ export function buildCsvCurves(
       cash += -dir * tr.qty * tr.price - tr.fees;
     }
     let value = cash;
+    const snap = new Map<string, { qty: number; price: number }>();
     for (const [ticker, qty] of qtyByTicker) {
       if (Math.abs(qty) < 1e-9) continue;
       const series = histByTicker[ticker];
@@ -179,38 +187,34 @@ export function buildCsvCurves(
       // create an artificial dip-then-jump the moment the price series begins).
       let price = priceAt(series, t);
       if (price == null && series && series.length) price = series[0].close;
-      if (price != null) value += qty * price;
+      if (price != null) { value += qty * price; snap.set(ticker, { qty, price }); }
     }
+    posSnapshots.push(snap);
     return { t, value };
   });
 
-  // External net flow within each interval (t_{i-1}, t_i]
-  const flowAt = (i: number): number => {
-    if (i === 0) return 0;
-    const lo = axis[i - 1], hi = axis[i];
-    return sortedFlows.reduce((s, f) => {
-      const d = dayMs(f.date);
-      return d > lo && d <= hi ? s + f.amount : s;
-    }, 0);
-  };
-
-  // Time-weighted return: chain per-interval returns with flows removed.
-  // The index only starts once NLV is first positive (capital deployed), so a
-  // deposit-funded account (starting NLV = 0) doesn't produce a degenerate flat line.
+  // Unlevered return per interval: Σ position P&L ÷ Σ gross exposure, both using the
+  // START-of-interval qty/price. Cash/margin never appear, so leverage cancels out.
   const performance: EquityPoint[] = [];
-  let base = 0, index = 0, started = false;
+  let index = 100;
   for (let i = 0; i < nlv.length; i++) {
-    const v = nlv[i].value;
-    if (!started) {
-      if (v > 0) { started = true; base = v; index = v; }
-    } else {
-      const prev = nlv[i - 1].value;
-      const r = prev > 0 ? (v - flowAt(i)) / prev - 1 : 0;
+    if (i > 0) {
+      const prevSnap = posSnapshots[i - 1];
+      let pnl = 0, gross = 0;
+      for (const [ticker, { qty, price: prevPrice }] of prevSnap) {
+        const series = histByTicker[ticker];
+        let currPrice = priceAt(series, nlv[i].t);
+        if (currPrice == null && series && series.length) currPrice = series[0].close;
+        if (currPrice == null) continue;
+        pnl += qty * (currPrice - prevPrice);
+        gross += Math.abs(qty * prevPrice);
+      }
+      const r = gross > 0 ? pnl / gross : 0;
       index *= 1 + r;
     }
-    performance.push({ t: nlv[i].t, value: started ? index : v });
+    performance.push({ t: nlv[i].t, value: index });
   }
-  const twrPct = started && base !== 0 ? (index / base - 1) * 100 : 0;
+  const unleveredPct = (index / 100 - 1) * 100;
 
-  return { nlv, performance, twrPct };
+  return { nlv, performance, unleveredPct };
 }

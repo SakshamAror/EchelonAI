@@ -1,6 +1,10 @@
+import { useEffect, useState } from "react";
 import { supabaseConfigured } from "@/lib/supabase";
 import { useAuth, signInWithGoogle } from "@/lib/useAuth";
 import CsvPortfolio from "@/components/portfolio/CsvPortfolio";
+import ComparisonTab from "@/components/portfolio/ComparisonTab";
+
+type SubTab = "portfolio" | "comparison";
 
 // Shared wrapper for centered full-height message states
 function Centered({ children }: { children: React.ReactNode }) {
@@ -25,6 +29,10 @@ function Kicker({ text }: { text: string }) {
 
 export default function PortfolioPage() {
   const { session, loading } = useAuth();
+  const [subTab, setSubTab] = useState<SubTab>(
+    () => (localStorage.getItem("echelon_portfolio_subtab") === "comparison" ? "comparison" : "portfolio")
+  );
+  useEffect(() => { localStorage.setItem("echelon_portfolio_subtab", subTab); }, [subTab]);
 
   // 1. Supabase env not filled in
   if (!supabaseConfigured) {
@@ -83,9 +91,33 @@ export default function PortfolioPage() {
 
   // 4. Signed in — portfolio dashboard (account/sign-out lives in app Settings now)
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 40px 40px", width: "100%" }}>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0px 40px 40px", width: "100%" }}>
+      {/* sub-tabs: single-profile dashboard vs cross-profile comparison */}
+      <div className="subtab-bar" style={{ marginBottom: 0 }}>
+        {(["portfolio", "comparison"] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setSubTab(t)}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              padding: "12px 20px",
+              fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase",
+              color: subTab === t ? "var(--accent)" : "var(--text-dim)",
+              borderBottom: subTab === t ? "2px solid var(--accent)" : "2px solid transparent",
+              transition: "color 0.15s",
+              marginBottom: -1,
+            }}
+            onMouseEnter={e => { if (subTab !== t) e.currentTarget.style.color = "var(--text-muted)"; }}
+            onMouseLeave={e => { if (subTab !== t) e.currentTarget.style.color = "var(--text-dim)"; }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
       {/* CSV portfolio: profile + equity curve + holdings + cash flows */}
-      <CsvPortfolio />
+      {subTab === "portfolio" && <CsvPortfolio />}
+      {subTab === "comparison" && <ComparisonTab />}
     </div>
   );
 }

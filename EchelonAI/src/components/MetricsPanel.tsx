@@ -22,6 +22,11 @@ const METRIC_DEFINITIONS: MetricDefinition[] = [
     definition: "Price paid per $1 of the last 12 months of earnings. Highly sector-dependent — tech typically trades 25–40×, consumer staples 18–25×, utilities 15–20×. Under 12× may signal value or declining growth expectations. Over 50× embeds very high growth assumptions; a guidance miss hits hard. Always compare to sector peers, not an absolute number.",
   },
   {
+    key: "pegRatio", label: "PEG Ratio", category: "valuation",
+    definition: "P/E ratio divided by earnings growth rate. Below 1 suggests the stock may be undervalued relative to its growth.",
+    format: "number"
+  },
+  {
     key: "enterpriseToEbitda", label: "EV / EBITDA", category: "valuation", format: "multiple",
     definition: "Total company value (equity + debt − cash) divided by cash operating earnings. Removes capital structure differences, making it useful for comparing companies across leverage levels. 8–12× is typical for mature businesses; >20× implies a significant growth or quality premium. Widely used in M&A and PE analysis to assess deal pricing.",
   },
@@ -100,6 +105,11 @@ const METRIC_DEFINITIONS: MetricDefinition[] = [
   {
     key: "debtToEquity", label: "Debt / Equity", category: "balance", format: "ratio",
     definition: "Total debt divided by shareholders' equity. Below 0.5 indicates conservative, low-leverage financing. Above 2.0 is highly leveraged and raises refinancing risk. Sector context is critical — utilities, REITs, and banks structurally run higher D/E (2–5×) due to their business models. For tech and consumer companies, D/E above 1.5 is a concern worth investigating.",
+  },
+  {
+    key: "interestCoverageRatio", label: "Interest Coverage Ratio", category: "balance",
+    definition: "Operating income divided by interest expense. Measures how comfortably a company can pay interest on its debt from operating profit. Below 1.5 is often considered a warning sign.",
+    format: "number"
   },
   {
     key: "currentRatio", label: "Current Ratio", category: "balance", format: "ratio",
